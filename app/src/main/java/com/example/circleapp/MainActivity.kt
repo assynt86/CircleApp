@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -35,11 +36,12 @@ import com.example.circleapp.data.CircleRepository
 import com.example.circleapp.ui.HomeScreen
 import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.CircleScreen
-
-
-
+import com.example.circleapp.ui.HomeViewModel
 
 class MainActivity : ComponentActivity() {
+
+    private val homeViewModel by viewModels<HomeViewModel>()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -58,11 +60,14 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = navController, startDestination = "home") {
 
                     composable("home") {
+                        val circles by homeViewModel.circles.collectAsState()
+
                         HomeScreen(
-                            onCreateCircle = { name ->
+                            circles = circles,
+                            onCreateCircle = { name, durationDays ->
                                 repo.createCircle(
                                     circleName = name,
-                                    closeDurationMinutes = 30, // testing for now
+                                    durationDays = durationDays,
                                     onSuccess = { circleId ->
                                         Toast.makeText(context, "Circle created!", Toast.LENGTH_SHORT).show()
                                         navController.navigate("circle/$circleId")
@@ -86,6 +91,9 @@ class MainActivity : ComponentActivity() {
                                         Toast.makeText(context, "Join failed: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
                                 )
+                            },
+                            onCircleClick = { circleId ->
+                                navController.navigate("circle/$circleId")
                             }
                         )
                     }
@@ -243,4 +251,3 @@ fun CameraPreview(modifier: Modifier = Modifier) {
         }
     }
 }
-

@@ -8,7 +8,6 @@ import kotlin.random.Random
 import android.net.Uri
 import com.google.firebase.storage.FirebaseStorage
 
-
 class CircleRepository {
 
     private val db = FirebaseFirestore.getInstance()
@@ -16,13 +15,13 @@ class CircleRepository {
 
     /**
      * Creates a circle with:
-     * - closeAt = now + closeDurationMinutes
+     * - closeAt = now + durationDays
      * - deleteAt = closeAt + 48 hours
      * - cleanedUp = false (for your scheduled Cloud Function)
      */
     fun createCircle(
         circleName: String,
-        closeDurationMinutes: Long = 30, // For testing. Later you can make this user-chosen.
+        durationDays: Int,
         onSuccess: (circleId: String) -> Unit,
         onError: (Exception) -> Unit
     ) {
@@ -32,7 +31,7 @@ class CircleRepository {
         }
 
         val nowMillis = System.currentTimeMillis()
-        val closeAtMillis = nowMillis + closeDurationMinutes * 60_000
+        val closeAtMillis = nowMillis + durationDays * 24L * 60L * 60L * 1000L
         val deleteAtMillis = closeAtMillis + 48L * 60L * 60L * 1000L // +48 hours
 
         val inviteCode = generateInviteCode()
@@ -142,6 +141,30 @@ class CircleRepository {
                     .addOnFailureListener { e -> onError(e) }
             }
             .addOnFailureListener { e -> onError(e) }
+    }
+
+    fun getUserCircles(
+        onSuccess: (circles: List<Circle>) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val uid = auth.currentUser?.uid ?: run {
+            onError(IllegalStateException("User not signed in"))
+            return
+        }
+
+        db.collection("circles")
+            .whereArrayContains("members", uid)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    onError(e)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val circles = snapshot.toObjects(Circle::class.java)
+                    onSuccess(circles)
+                }
+            }
     }
 
 

@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material3.ExperimentalMaterial3Api
 import android.widget.Toast
@@ -22,12 +21,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.rememberCoroutineScope
 import com.example.circleapp.data.SavedPhotosStore
 import com.example.circleapp.data.saveJpegToGallery
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-
-
-
-
 
 // Simple data class for circle info we care about in UI
 data class CircleInfo(
@@ -92,6 +88,7 @@ fun CircleScreen(
 
     // Tracks downloads in progress so we don’t start the same download twice
     val inProgress = remember { mutableStateListOf<String>() } // stores photoIds
+    var remainingTime by remember { mutableStateOf("") }
 
     // --- 1) Listen to circle document ---
     DisposableEffect(circleId) {
@@ -124,6 +121,22 @@ fun CircleScreen(
             reg.remove()
         }
     }
+    
+    LaunchedEffect(circleInfo?.closeAt) {
+        circleInfo?.closeAt?.toDate()?.time?.let { closeAtMillis ->
+            while (System.currentTimeMillis() < closeAtMillis) {
+                val remaining = closeAtMillis - System.currentTimeMillis()
+                if (remaining > 0) {
+                    remainingTime = DateUtils.formatElapsedTime(remaining / 1000)
+                } else {
+                    remainingTime = ""
+                    break
+                }
+                delay(1000)
+            }
+            circleInfo = circleInfo?.copy() 
+        }
+    }
 
 
     // --- 2) Listen to photos subcollection ---
@@ -147,7 +160,7 @@ fun CircleScreen(
                     )
                 }
 
-                // 2) Set it to state so UI updates immediately (shows "Loading image...")
+                // 2) Set it to state so UI updates immediately (shows \"Loading image...\")
                 photos = newList
 
                 // 3) For each photo, fetch the download URL and update that item in state
@@ -183,7 +196,7 @@ fun CircleScreen(
             val alreadySaved = savedStore.isSaved(circleId, photoId)
             if (alreadySaved) return@forEach
 
-            // Mark "in progress" so we don't duplicate work
+            // Mark \"in progress\" so we don't duplicate work
             inProgress.add(photoId)
 
             // Download + save in a coroutine
@@ -286,10 +299,8 @@ fun CircleScreen(
             Spacer(Modifier.height(8.dp))
 
             // Show open/closed + time remaining
-            val now = System.currentTimeMillis()
             val closeAtMillis = info.closeAt?.toDate()?.time
-
-            val isClosed = closeAtMillis != null && now >= closeAtMillis
+            val isClosed = closeAtMillis != null && System.currentTimeMillis() >= closeAtMillis
 
             Text(
                 text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
@@ -297,9 +308,7 @@ fun CircleScreen(
             )
 
             if (closeAtMillis != null && !isClosed) {
-                val remaining = closeAtMillis - now
-                val pretty = DateUtils.formatElapsedTime(remaining / 1000)
-                Text("Closes in: $pretty")
+                Text("Closes in: $remainingTime")
             }
 
             Spacer(Modifier.height(16.dp))
