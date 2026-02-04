@@ -1,9 +1,11 @@
 package com.example.circleapp.ui
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,9 +23,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.rememberCoroutineScope
 import com.example.circleapp.data.SavedPhotosStore
 import com.example.circleapp.data.saveJpegToGallery
+import com.google.accompanist.pager.ExperimentalPagerApi
+import com.google.accompanist.pager.HorizontalPager
+import com.google.accompanist.pager.rememberPagerState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.window.Dialog
+
 
 // Simple data class for circle info we care about in UI
 data class CircleInfo(
@@ -59,7 +68,7 @@ private fun fetchDownloadUrl(
         .addOnFailureListener { onResult(null) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPagerApi::class)
 @Composable
 fun CircleScreen(
     circleId: String,
@@ -85,6 +94,7 @@ fun CircleScreen(
 
     val savedStore = remember { SavedPhotosStore(context) }
     val scope = rememberCoroutineScope()
+    var fullscreenImage by remember { mutableStateOf<Int?>(null) }
 
     // Tracks downloads in progress so we don’t start the same download twice
     val inProgress = remember { mutableStateListOf<String>() } // stores photoIds
@@ -121,7 +131,7 @@ fun CircleScreen(
             reg.remove()
         }
     }
-    
+
     LaunchedEffect(circleInfo?.closeAt) {
         circleInfo?.closeAt?.toDate()?.time?.let { closeAtMillis ->
             while (System.currentTimeMillis() < closeAtMillis) {
@@ -134,7 +144,7 @@ fun CircleScreen(
                 }
                 delay(1000)
             }
-            circleInfo = circleInfo?.copy() 
+            circleInfo = circleInfo?.copy()
         }
     }
 
@@ -160,7 +170,7 @@ fun CircleScreen(
                     )
                 }
 
-                // 2) Set it to state so UI updates immediately (shows \"Loading image...\")
+                // 2) Set it to state so UI updates immediately (shows "Loading image...")
                 photos = newList
 
                 // 3) For each photo, fetch the download URL and update that item in state
@@ -196,7 +206,7 @@ fun CircleScreen(
             val alreadySaved = savedStore.isSaved(circleId, photoId)
             if (alreadySaved) return@forEach
 
-            // Mark \"in progress\" so we don't duplicate work
+            // Mark "in progress" so we don't duplicate work
             inProgress.add(photoId)
 
             // Download + save in a coroutine
@@ -323,46 +333,53 @@ fun CircleScreen(
                 Text(if (isUploading) "Uploading..." else "Share Photo")
             }
 
-
-            // Photos list (for now it’s just metadata entries)
             Text("Photos (${photos.size})", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
 
             if (photos.isEmpty()) {
                 Text("No photos yet.")
             } else {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(photos) { p ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-
-                                // If we have a download URL, show the image
-                                if (p.downloadUrl != null) {
-                                    AsyncImage(
-                                        model = p.downloadUrl,
-                                        contentDescription = "Circle photo",
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(250.dp),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                } else {
-                                    Text("Loading image...")
-                                    Spacer(Modifier.height(8.dp))
-                                }
-
-                                // Keep some debug info (you can remove later)
-                                Text("Uploader: ${p.uploaderUid}")
-                                Text("Created: ${p.createdAt?.toDate() ?: "?"}")
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) { itemsIndexed(photos) { index, p ->
+                        Card(modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { fullscreenImage = index }) {
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                AsyncImage(
+                                    model = p.downloadUrl,
+                                    contentDescription = "Circle photo",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .clip(MaterialTheme.shapes.medium),
+                                    contentScale = ContentScale.Crop
+                                )
                             }
                         }
-
                     }
                 }
+            }
+        }
+    }
+    if (fullscreenImage != null) {
+        Dialog(onDismissRequest = { fullscreenImage = null }) {
+            val pagerState = rememberPagerState(initialPage = fullscreenImage!!)
+            HorizontalPager(
+                count = photos.size,
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                page ->
+                AsyncImage(
+                    model = photos[page].downloadUrl,
+                    contentDescription = "Full screen image",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
             }
         }
     }
