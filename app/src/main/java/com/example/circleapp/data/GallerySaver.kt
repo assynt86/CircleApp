@@ -5,32 +5,27 @@ import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 
-/**
- * Saves JPEG bytes into the user's Gallery using MediaStore.
- * Returns the Uri of the saved image (or null if failed).
- */
 fun saveJpegToGallery(
     context: Context,
     bytes: ByteArray,
     displayNameNoExt: String,
-    relativePath: String = "Pictures/Circle"
+    relativePath: String
 ): Uri? {
-    val resolver = context.contentResolver
-
-    val values = ContentValues().apply {
+    val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, "$displayNameNoExt.jpg")
         put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-        // This puts it in Gallery under: Pictures/Circle
-        put(MediaStore.Images.Media.RELATIVE_PATH, relativePath)
+        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
     }
 
-    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        ?: return null
-
-    resolver.openOutputStream(uri)?.use { output ->
-        output.write(bytes)
-        output.flush()
-    } ?: return null
-
-    return uri
+    return try {
+        context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            ?.also { uri ->
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(bytes)
+                }
+            }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
 }

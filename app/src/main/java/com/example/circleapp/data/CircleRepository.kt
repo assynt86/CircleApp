@@ -6,6 +6,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.random.Random
 import android.net.Uri
+import com.example.circleapp.data.CircleInfo
+import com.example.circleapp.data.PhotoItem
 import com.google.firebase.storage.FirebaseStorage
 
 class CircleRepository {
@@ -143,6 +145,50 @@ class CircleRepository {
             .addOnFailureListener { e -> onError(e) }
     }
 
+    fun addPhotoToCircle(
+        photoUri: Uri,
+        circleId: String,
+        onResult: (isSuccess: Boolean) -> Unit
+    ) {
+        uploadPhotoToCircle(circleId, photoUri,
+            onSuccess = { onResult(true) },
+            onError = { onResult(false) }
+        )
+    }
+
+    fun addPhotoToCircles(
+        photoUri: Uri,
+        circleIds: List<String>,
+        onResult: (isSuccess: Boolean) -> Unit
+    ) {
+        if (circleIds.isEmpty()) {
+            onResult(false)
+            return
+        }
+
+        var completedCount = 0
+        var successCount = 0
+        val totalCircles = circleIds.size
+
+        circleIds.forEach { circleId ->
+            uploadPhotoToCircle(circleId, photoUri,
+                onSuccess = {
+                    completedCount++
+                    successCount++
+                    if (completedCount == totalCircles) {
+                        onResult(successCount == totalCircles)
+                    }
+                },
+                onError = {
+                    completedCount++
+                    if (completedCount == totalCircles) {
+                        onResult(successCount == totalCircles)
+                    }
+                }
+            )
+        }
+    }
+
     fun getUserCircles(
         onSuccess: (circles: List<Circle>) -> Unit,
         onError: (Exception) -> Unit
@@ -165,6 +211,66 @@ class CircleRepository {
                     onSuccess(circles)
                 }
             }
+    }
+
+    fun listenToCircle(
+        circleId: String,
+        onSuccess: (CircleInfo) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles").document(circleId)
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    onError(e)
+                    return@addSnapshotListener
+                }
+                if (snap != null && snap.exists()) {
+                    val name = snap.getString("name") ?: ""
+                    val invite = snap.getString("inviteCode") ?: ""
+                    val status = snap.getString("status") ?: "open"
+                    val closeAt = snap.getTimestamp("closeAt")
+                    onSuccess(CircleInfo(name, invite, status, closeAt))
+                } else {
+                    onError(Exception("Circle not found"))
+                }
+            }
+    }
+
+    fun listenToPhotos(
+        circleId: String,
+        onSuccess: (List<PhotoItem>) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles").document(circleId).collection("photos")
+            .orderBy("createdAt")
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    onError(e)
+                    return@addSnapshotListener
+                }
+                if (snap != null) {
+                    val photoList = snap.documents.map { doc ->
+                        PhotoItem(
+                            id = doc.id,
+                            uploaderUid = doc.getString("uploaderUid") ?: "",
+                            storagePath = doc.getString("storagePath") ?: "",
+                            createdAt = doc.getTimestamp("createdAt"),
+                            downloadUrl = null
+                        )
+                    }
+                    onSuccess(photoList)
+                }
+            }
+    }
+
+    fun getDownloadUrl(storagePath: String, onResult: (String?) -> Unit) {
+        if (storagePath.isBlank()) {
+            onResult(null)
+            return
+        }
+        FirebaseStorage.getInstance().reference.child(storagePath).downloadUrl
+            .addOnSuccessListener { uri -> onResult(uri.toString()) }
+            .addOnFailureListener { onResult(null) }
     }
 
 

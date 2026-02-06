@@ -1,5 +1,6 @@
-package com.example.circleapp.ui
+package com.example.circleapp.ui.views
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,77 +39,97 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.circleapp.data.Circle
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.circleapp.ui.viewmodels.HomeUiState
+import com.example.circleapp.ui.viewmodels.HomeViewModel
+import com.google.accompanist.pager.ExperimentalPagerApi
+import com.google.accompanist.pager.HorizontalPager
+import com.google.accompanist.pager.rememberPagerState
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalPagerApi::class)
+@Composable
+fun HomeView(
+    homeViewModel: HomeViewModel = viewModel(),
+    onCircleClick: (String) -> Unit,
+    onPhotoSaved: (String) -> Unit,
+    onUploadFailed: (String, String) -> Unit,
+    onJoinCircle: (String, (String) -> Unit, () -> Unit, (Exception) -> Unit) -> Unit,
+    onCreateCircle: (String, Int, (String) -> Unit, (Exception) -> Unit) -> Unit
+) {
+    val uiState by homeViewModel.uiState.collectAsState()
+    val pagerState = rememberPagerState(initialPage = 1)
+    val coroutineScope = rememberCoroutineScope()
+
+    HorizontalPager(count = 2, state = pagerState) { page ->
+        when (page) {
+            0 -> CameraView(
+                circles = uiState.circles.filter { it.status == "open" },
+                selectedCircleIds = uiState.selectedCircleIds,
+                onPhotoSaved = { uri, circleIds ->
+                    homeViewModel.uploadPhotoToCircles(uri, onPhotoSaved, onUploadFailed)
+                    coroutineScope.launch {
+                        pagerState.animateScrollToPage(1, animationSpec = tween(500))
+                    }
+                },
+                onCancel = {
+                    coroutineScope.launch {
+                        pagerState.animateScrollToPage(1, animationSpec = tween(500))
+                    }
+                },
+                onCircleSelected = { circleId, isSelected ->
+                    homeViewModel.onCircleSelected(circleId, isSelected)
+                }
+            )
+            1 -> HomeViewContent(
+                uiState = uiState,
+                onCircleClick = onCircleClick,
+                onJoinCircle = { onJoinCircle(uiState.joinInviteCode, { /* onSuccess */ }, { /* onNotFound */ }, { /* onError */ }) },
+                onCreateCircle = { onCreateCircle(uiState.newCircleName, uiState.newCircleDurationDays.toInt(), { /* onSuccess */ }, { /* onError */ }) },
+                onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
+                onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
+                onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
+                onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
+                onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) }
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    circles: List<Circle>,
-    onCreateCircle: (circleName: String, durationDays: Int) -> Unit,
-    onJoinCircle: (inviteCode: String) -> Unit,
-    onCircleClick: (circleId: String) -> Unit
+fun HomeViewContent(
+    uiState: HomeUiState,
+    onCircleClick: (String) -> Unit,
+    onJoinCircle: () -> Unit,
+    onCreateCircle: () -> Unit,
+    onShowCreateCircleDialog: (Boolean) -> Unit,
+    onShowJoinCircleDialog: (Boolean) -> Unit,
+    onNewCircleNameChange: (String) -> Unit,
+    onNewCircleDurationChange: (Float) -> Unit,
+    onInviteCodeChange: (String) -> Unit
 ) {
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var showJoinDialog by remember { mutableStateOf(false) }
-
-    var circleName by remember { mutableStateOf("") }
-    var durationSliderPosition by remember { mutableStateOf(1f) }
-    var inviteCode by remember { mutableStateOf("") }
-    val db = remember { FirebaseFirestore.getInstance() }
-    val allCircles = remember { mutableStateOf(emptyList<Circle>()) }
-
-    LaunchedEffect(key1 = circles) {
-        val currentUser = FirebaseAuth.getInstance().currentUser
-        if (currentUser != null) {
-            db.collection("circles").addSnapshotListener { snapshot, _ ->
-                snapshot?.let { querySnapshot ->
-                    val userCircles = mutableListOf<Circle>()
-                    for (doc in querySnapshot.documents) {
-                        val membersCollection = doc.reference.collection("members")
-                        membersCollection.addSnapshotListener { membersSnapshot, _ ->
-                            membersSnapshot?.let { membersQuerySnapshot ->
-                                if (membersQuerySnapshot.documents.any { it.id == currentUser.uid }) {
-                                    val circle = doc.toObject(Circle::class.java)
-                                    if (circle != null) {
-                                        userCircles.add(circle)
-                                    }
-                                }
-                                allCircles.value = circles + userCircles.filterNot { newCircle -> circles.any { it.id == newCircle.id } }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("CircleApp") },
                 actions = {
-                    IconButton(onClick = { showCreateDialog = true }) {
+                    IconButton(onClick = { onShowCreateCircleDialog(true) }) {
                         Icon(Icons.Filled.Add, contentDescription = "Create Circle")
                     }
-                    IconButton(onClick = { showJoinDialog = true }) {
+                    IconButton(onClick = { onShowJoinCircleDialog(true) }) {
                         Icon(Icons.Default.CameraAlt, contentDescription = "Join Circle")
                     }
                 }
@@ -124,7 +145,7 @@ fun HomeScreen(
             Text("Your Circles", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(16.dp))
 
-            if (allCircles.value.isEmpty()) {
+            if (uiState.circles.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No circles yet. Create or join one!")
                 }
@@ -134,7 +155,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) { items(allCircles.value) { circle ->
+                ) { items(uiState.circles) { circle ->
                         val now = System.currentTimeMillis()
                         val closeAtMillis = circle.closeAt?.toDate()?.time ?: (now + TimeUnit.DAYS.toMillis(8))
                         val isClosed = circle.status == "closed" || closeAtMillis < now
@@ -157,25 +178,13 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                var scaledFontSize by remember { mutableStateOf(50.sp) }
-                                var readyToDraw by remember { mutableStateOf(false) }
-
                                 Text(
                                     text = circle.name,
-                                    modifier = Modifier
-                                        .padding(8.dp)
-                                        .alpha(if (readyToDraw) 1f else 0f),
+                                    modifier = Modifier.padding(8.dp),
                                     textAlign = TextAlign.Center,
-                                    style = TextStyle.Default.copy(fontSize = scaledFontSize),
+                                    style = TextStyle.Default.copy(fontSize = 24.sp),
                                     softWrap = true,
-                                    maxLines = 2,
-                                    onTextLayout = { textLayoutResult ->
-                                        if (textLayoutResult.didOverflowHeight && !readyToDraw) {
-                                            scaledFontSize *= 0.9f
-                                        } else {
-                                            readyToDraw = true
-                                        }
-                                    }
+                                    maxLines = 2
                                 )
                             }
                         }
@@ -185,23 +194,23 @@ fun HomeScreen(
         }
     }
 
-    if (showCreateDialog) {
+    if (uiState.isCreateCircleDialogVisible) {
         AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
+            onDismissRequest = { onShowCreateCircleDialog(false) },
             title = { Text("Create a Circle") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = circleName,
-                        onValueChange = { circleName = it },
+                        value = uiState.newCircleName,
+                        onValueChange = onNewCircleNameChange,
                         label = { Text("Circle name") },
                         singleLine = true
                     )
                     Spacer(Modifier.height(24.dp))
-                    Text("Duration: ${durationSliderPosition.toInt()} days")
+                    Text("Duration: ${uiState.newCircleDurationDays.toInt()} days")
                     Slider(
-                        value = durationSliderPosition,
-                        onValueChange = { durationSliderPosition = it },
+                        value = uiState.newCircleDurationDays,
+                        onValueChange = onNewCircleDurationChange,
                         valueRange = 1f..7f,
                         steps = 5
                     )
@@ -209,31 +218,23 @@ fun HomeScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onCreateCircle(circleName, durationSliderPosition.toInt())
-                        showCreateDialog = false
-                        circleName = ""
-                        durationSliderPosition = 1f
-                    },
-                    enabled = circleName.isNotBlank()
+                    onClick = onCreateCircle,
+                    enabled = uiState.newCircleName.isNotBlank()
                 ) {
                     Text("Create")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) {
+                TextButton(onClick = { onShowCreateCircleDialog(false) }) {
                     Text("Cancel")
                 }
             }
         )
     }
 
-    if (showJoinDialog) {
+    if (uiState.isJoinCircleDialogVisible) {
         AlertDialog(
-            onDismissRequest = {
-                showJoinDialog = false
-                inviteCode = ""
-            },
+            onDismissRequest = { onShowJoinCircleDialog(false) },
             title = { Text("Join a Circle") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -251,16 +252,12 @@ fun HomeScreen(
                     Text("Or enter code manually")
                     Spacer(Modifier.height(8.dp))
                     BasicTextField(
-                        value = inviteCode,
-                        onValueChange = {
-                            if (it.length <= 6) {
-                                inviteCode = it.uppercase()
-                            }
-                        },
+                        value = uiState.joinInviteCode,
+                        onValueChange = onInviteCodeChange,
                         decorationBox = @Composable { _ ->
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 repeat(6) { index ->
-                                    val char = inviteCode.getOrNull(index)
+                                    val char = uiState.joinInviteCode.getOrNull(index)
                                     Box(
                                         modifier = Modifier
                                             .width(35.dp)
@@ -286,21 +283,14 @@ fun HomeScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        onJoinCircle(inviteCode)
-                        showJoinDialog = false
-                        inviteCode = ""
-                    },
-                    enabled = inviteCode.length == 6
+                    onClick = onJoinCircle,
+                    enabled = uiState.joinInviteCode.length == 6
                 ) {
                     Text("Join")
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showJoinDialog = false
-                    inviteCode = ""
-                }) {
+                TextButton(onClick = { onShowJoinCircleDialog(false) }) {
                     Text("Cancel")
                 }
             }

@@ -22,3 +22,18 @@ data class Photo(
     val storagePath: String = "",
     val createdAt: Timestamp? = null
 )
+
+data class CircleInfo(
+    val name: String,
+    val inviteCode: String,
+    val status: String,
+    val closeAt: Timestamp?
+)
+
+data class PhotoItem(
+    val id: String,
+    val uploaderUid: String,
+    val storagePath: String,
+    val createdAt: Timestamp?,
+    var downloadUrl: String? = null
+)
