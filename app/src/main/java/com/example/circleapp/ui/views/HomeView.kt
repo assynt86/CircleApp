@@ -1,6 +1,6 @@
 package com.example.circleapp.ui.views
 
-import androidx.compose.animation.core.tween
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,7 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,11 +41,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,59 +53,40 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
-import com.google.accompanist.pager.ExperimentalPagerApi
-import com.google.accompanist.pager.HorizontalPager
-import com.google.accompanist.pager.rememberPagerState
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalPagerApi::class)
 @Composable
 fun HomeView(
     homeViewModel: HomeViewModel = viewModel(),
     onCircleClick: (String) -> Unit,
-    onPhotoSaved: (String) -> Unit,
-    onUploadFailed: (String, String) -> Unit,
-    onJoinCircle: (String, (String) -> Unit, () -> Unit, (Exception) -> Unit) -> Unit,
-    onCreateCircle: (String, Int, (String) -> Unit, (Exception) -> Unit) -> Unit
+    onJoinCircle: (String) -> Unit,
+    onCreateCircle: (String) -> Unit
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
-    val pagerState = rememberPagerState(initialPage = 1)
-    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
-    HorizontalPager(count = 2, state = pagerState) { page ->
-        when (page) {
-            0 -> CameraView(
-                circles = uiState.circles.filter { it.status == "open" },
-                selectedCircleIds = uiState.selectedCircleIds,
-                onPhotoSaved = { uri, circleIds ->
-                    homeViewModel.uploadPhotoToCircles(uri, onPhotoSaved, onUploadFailed)
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(1, animationSpec = tween(500))
-                    }
-                },
-                onCancel = {
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(1, animationSpec = tween(500))
-                    }
-                },
-                onCircleSelected = { circleId, isSelected ->
-                    homeViewModel.onCircleSelected(circleId, isSelected)
-                }
+    HomeViewContent(
+        uiState = uiState,
+        onCircleClick = onCircleClick,
+        onJoinCircle = {
+            homeViewModel.joinCircle(
+                onSuccess = onJoinCircle,
+                onNotFound = { Toast.makeText(context, "Circle not found", Toast.LENGTH_SHORT).show() },
+                onError = { Toast.makeText(context, "Error joining circle", Toast.LENGTH_SHORT).show() }
             )
-            1 -> HomeViewContent(
-                uiState = uiState,
-                onCircleClick = onCircleClick,
-                onJoinCircle = { onJoinCircle(uiState.joinInviteCode, { /* onSuccess */ }, { /* onNotFound */ }, { /* onError */ }) },
-                onCreateCircle = { onCreateCircle(uiState.newCircleName, uiState.newCircleDurationDays.toInt(), { /* onSuccess */ }, { /* onError */ }) },
-                onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
-                onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
-                onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
-                onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
-                onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) }
+        },
+        onCreateCircle = {
+            homeViewModel.createCircle(
+                onSuccess = onCreateCircle,
+                onError = { Toast.makeText(context, "Error creating circle", Toast.LENGTH_SHORT).show() }
             )
-        }
-    }
+        },
+        onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
+        onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
+        onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
+        onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
+        onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -126,11 +107,11 @@ fun HomeViewContent(
             TopAppBar(
                 title = { Text("CircleApp") },
                 actions = {
+                    IconButton(onClick = { onShowJoinCircleDialog(true) }) {
+                        Icon(Icons.Filled.GroupAdd, contentDescription = "Join Circle")
+                    }
                     IconButton(onClick = { onShowCreateCircleDialog(true) }) {
                         Icon(Icons.Filled.Add, contentDescription = "Create Circle")
-                    }
-                    IconButton(onClick = { onShowJoinCircleDialog(true) }) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Join Circle")
                     }
                 }
             )
