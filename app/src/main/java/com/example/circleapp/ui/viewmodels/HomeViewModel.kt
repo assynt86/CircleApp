@@ -92,33 +92,41 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    fun uploadPhotoToCircles(uri: Uri, onPhotoUploaded: (String) -> Unit, onUploadFailed: (String, String) -> Unit) {
+    fun uploadPhotoToCircles(
+        uri: Uri,
+        onUploadsComplete: () -> Unit,
+        onUploadFailed: (String, String) -> Unit
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isCapturing = true) }
             val selectedIds = _uiState.value.selectedCircleIds
             if (selectedIds.isEmpty()) {
                 _uiState.update { it.copy(isCapturing = false) }
+                onUploadsComplete()
                 return@launch
             }
 
-            var uploadsFinished = 0
+            val totalCircles = selectedIds.size
+            var finishedCount = 0
+
+            fun checkCompletion() {
+                finishedCount++
+                if (finishedCount == totalCircles) {
+                    _uiState.update { it.copy(isCapturing = false) }
+                    onUploadsComplete()
+                }
+            }
+
             selectedIds.forEach { circleId ->
                 repository.uploadPhotoToCircle(
                     circleId = circleId,
                     photoUri = uri,
-                    onSuccess = { photoId ->
-                        onPhotoUploaded(circleId)
-                        uploadsFinished++
-                        if (uploadsFinished == selectedIds.size) {
-                            _uiState.update { it.copy(isCapturing = false) }
-                        }
+                    onSuccess = {
+                        checkCompletion()
                     },
                     onError = { e ->
                         onUploadFailed(circleId, e.message ?: "Unknown error")
-                        uploadsFinished++
-                        if (uploadsFinished == selectedIds.size) {
-                            _uiState.update { it.copy(isCapturing = false) }
-                        }
+                        checkCompletion()
                     }
                 )
             }
@@ -143,7 +151,7 @@ class HomeViewModel : ViewModel() {
     fun showJoinCircleDialog(show: Boolean) {
         _uiState.update { it.copy(isJoinCircleDialogVisible = show, joinInviteCode = "") }
     }
-    
+
     fun onNewCircleNameChange(name: String) {
         _uiState.update { it.copy(newCircleName = name) }
     }

@@ -24,6 +24,7 @@ import com.example.circleapp.ui.viewmodels.HomeViewModel
 import com.example.circleapp.ui.views.CameraView
 import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
+import com.example.circleapp.ui.views.ProfileView
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -63,7 +64,7 @@ fun AppNavigation() {
             val startPage = backStackEntry.arguments?.getInt("startPage") ?: 1
             val circleId = backStackEntry.arguments?.getString("circleId")
 
-            val pagerState = rememberPagerState(initialPage = startPage) { 2 }
+            val pagerState = rememberPagerState(initialPage = startPage) { 3 }
 
             LaunchedEffect(startPage) {
                 if (pagerState.currentPage != startPage) {
@@ -83,13 +84,8 @@ fun AppNavigation() {
                                 coroutineScope.launch { pagerState.animateScrollToPage(1) }
                             }
                         },
-                        onUploadFailed = { _, _ ->
-                            if (circleId != null) {
-                                navController.popBackStack()
-                            } else {
-                                coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                            }
-                        }
+                        onUploadsComplete = {},
+                        onUploadFailed = { _, _ -> }
                     )
                     1 -> HomeView(
                         homeViewModel = homeViewModel,
@@ -103,6 +99,7 @@ fun AppNavigation() {
                             navController.navigate("circle/$newCircleId")
                         }
                     )
+                    2 -> ProfileView()
                 }
             }
         }
