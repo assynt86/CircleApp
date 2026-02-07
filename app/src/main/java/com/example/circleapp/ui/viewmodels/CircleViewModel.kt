@@ -143,6 +143,14 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         }
     }
 
+    fun uploadPhotoAndKeepCameraOpen(uri: Uri, circleIds: List<String>, onComplete: (Boolean) -> Unit) {
+        _uiState.update { it.copy(isUploading = true) }
+        repository.addPhotoToCircles(uri, circleIds) { isSuccess ->
+            _uiState.update { it.copy(isUploading = false) }
+            onComplete(isSuccess)
+        }
+    }
+
     fun onShowCamera(show: Boolean) {
         _uiState.update { it.copy(showCamera = show) }
     }

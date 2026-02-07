@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+data class CameraNavigationState(
+    val navigateToCamera: Boolean = false,
+    val entryPointCircleId: String? = null
+)
+
 data class HomeUiState(
     val circles: List<Circle> = emptyList(),
     val selectedCircleIds: List<String> = emptyList(),
@@ -18,7 +23,10 @@ data class HomeUiState(
     val isJoinCircleDialogVisible: Boolean = false,
     val newCircleName: String = "",
     val newCircleDurationDays: Float = 1f,
-    val joinInviteCode: String = ""
+    val joinInviteCode: String = "",
+    val hasCameraPermission: Boolean = false,
+    val isCapturing: Boolean = false,
+    val cameraNavigationState: CameraNavigationState = CameraNavigationState()
 )
 
 class HomeViewModel : ViewModel() {
@@ -48,6 +56,18 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    fun onCameraPermissionResult(isGranted: Boolean) {
+        _uiState.update { it.copy(hasCameraPermission = isGranted) }
+    }
+
+    fun navigateToCameraWithCircle(circleId: String) {
+        _uiState.update { it.copy(cameraNavigationState = CameraNavigationState(navigateToCamera = true, entryPointCircleId = circleId)) }
+    }
+
+    fun onCameraNavigationHandled() {
+        _uiState.update { it.copy(cameraNavigationState = CameraNavigationState()) }
+    }
+
     fun createCircle(onSuccess: (String) -> Unit, onError: (Exception) -> Unit) {
         viewModelScope.launch {
             repository.createCircle(
@@ -74,15 +94,32 @@ class HomeViewModel : ViewModel() {
 
     fun uploadPhotoToCircles(uri: Uri, onPhotoUploaded: (String) -> Unit, onUploadFailed: (String, String) -> Unit) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isCapturing = true) }
             val selectedIds = _uiState.value.selectedCircleIds
-            if (selectedIds.isEmpty()) return@launch
+            if (selectedIds.isEmpty()) {
+                _uiState.update { it.copy(isCapturing = false) }
+                return@launch
+            }
 
+            var uploadsFinished = 0
             selectedIds.forEach { circleId ->
                 repository.uploadPhotoToCircle(
                     circleId = circleId,
                     photoUri = uri,
-                    onSuccess = { photoId -> onPhotoUploaded(circleId) },
-                    onError = { e -> onUploadFailed(circleId, e.message ?: "Unknown error") }
+                    onSuccess = { photoId ->
+                        onPhotoUploaded(circleId)
+                        uploadsFinished++
+                        if (uploadsFinished == selectedIds.size) {
+                            _uiState.update { it.copy(isCapturing = false) }
+                        }
+                    },
+                    onError = { e ->
+                        onUploadFailed(circleId, e.message ?: "Unknown error")
+                        uploadsFinished++
+                        if (uploadsFinished == selectedIds.size) {
+                            _uiState.update { it.copy(isCapturing = false) }
+                        }
+                    }
                 )
             }
         }

@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -43,39 +44,48 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.circleapp.data.Circle
-import com.example.circleapp.ui.viewmodels.CameraViewModel
+import com.example.circleapp.ui.viewmodels.HomeViewModel
+import kotlinx.coroutines.delay
+import java.io.File
 
 @Composable
 fun CameraView(
-    cameraViewModel: CameraViewModel = viewModel(),
-    circles: List<Circle>,
-    selectedCircleIds: List<String>,
-    onPhotoSaved: (Uri, List<String>) -> Unit,
+    homeViewModel: HomeViewModel,
+    entryPointCircleId: String?,
     onCancel: () -> Unit,
-    onCircleSelected: (String, Boolean) -> Unit
+    onUploadFailed: (String, String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val uiState by cameraViewModel.uiState.collectAsState()
+    val uiState by homeViewModel.uiState.collectAsState()
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var showCirclesPopup by remember { mutableStateOf(false) }
+    var showFlash by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showFlash) {
+        if (showFlash) {
+            delay(100)
+            showFlash = false
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted -> cameraViewModel.onPermissionResult(isGranted) }
+        onResult = { isGranted -> homeViewModel.onCameraPermissionResult(isGranted) }
     )
 
     LaunchedEffect(Unit) {
         permissionLauncher.launch(Manifest.permission.CAMERA)
+        entryPointCircleId?.let {
+            homeViewModel.onCircleSelected(it, true)
+        }
     }
 
-    if (!uiState.hasPermission) {
+    if (!uiState.hasCameraPermission) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Camera permission is required.")
@@ -90,8 +100,7 @@ fun CameraView(
         return
     }
 
-    Box(Modifier.fillMaxSize()) {
-        AndroidView(
+    Box(Modifier.fillMaxSize()) {        AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 val previewView = PreviewView(ctx)
@@ -122,6 +131,14 @@ fun CameraView(
             }
         )
 
+        if (showFlash) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .border(4.dp, Color.White)
+            )
+        }
+
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -134,26 +151,24 @@ fun CameraView(
             DropdownMenu(
                 expanded = showCirclesPopup,
                 onDismissRequest = { showCirclesPopup = false }
-            ) {
-                circles.forEach { circle ->
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = selectedCircleIds.contains(circle.id),
-                                    onCheckedChange = { isChecked ->
-                                        onCircleSelected(circle.id, isChecked)
-                                    }
-                                )
-                                Text(circle.name)
-                            }
-                        },
-                        onClick = {
-                            onCircleSelected(circle.id, !selectedCircleIds.contains(circle.id))
+            ) { uiState.circles.forEach { circle ->
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = uiState.selectedCircleIds.contains(circle.id),
+                                onCheckedChange = { isChecked ->
+                                    homeViewModel.onCircleSelected(circle.id, isChecked)
+                                }
+                            )
+                            Text(circle.name)
                         }
-                    )
-                }
-            }
+                    },
+                    onClick = {
+                        homeViewModel.onCircleSelected(circle.id, !uiState.selectedCircleIds.contains(circle.id))
+                    }
+                )
+            } }
         }
 
         Column(
@@ -169,11 +184,54 @@ fun CameraView(
                     .padding(8.dp)
                     .border(2.dp, Color.White, CircleShape),
                 onClick = {
-                    cameraViewModel.takePicture(imageCapture) { uri ->
-                        onPhotoSaved(uri, selectedCircleIds)
-                    }
+                    showFlash = true
+                    val capture = imageCapture ?: return@IconButton
+
+                    val photoFile = File(
+                        context.cacheDir,
+                        "photo_${System.currentTimeMillis()}.jpg"
+                    )
+
+                    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+                    capture.takePicture(
+                        outputOptions,
+                        ContextCompat.getMainExecutor(context),
+                        object : ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                val savedUri = Uri.fromFile(photoFile)
+                                val totalCircles = uiState.selectedCircleIds.size
+                                var uploadedCount = 0
+                                var failedCount = 0
+
+                                fun checkCompletion() {
+                                    if (uploadedCount + failedCount == totalCircles) {
+                                        onCancel()
+                                    }
+                                }
+
+                                homeViewModel.uploadPhotoToCircles(
+                                    uri = savedUri,
+                                    onPhotoUploaded = {
+                                        uploadedCount++
+                                        checkCompletion()
+                                    },
+                                    onUploadFailed = { circleId, reason ->
+                                        failedCount++
+                                        onUploadFailed(circleId, reason)
+                                        checkCompletion()
+                                    }
+                                )
+                            }
+
+                            override fun onError(exc: ImageCaptureException) {
+                                onUploadFailed("Capture", exc.message ?: "Unknown error")
+                                onCancel()
+                            }
+                        }
+                    )
                 },
-                enabled = !uiState.isCapturing && selectedCircleIds.isNotEmpty()
+                enabled = !uiState.isCapturing && uiState.selectedCircleIds.isNotEmpty()
             ) {
                 Icon(
                     imageVector = Icons.Filled.Camera,

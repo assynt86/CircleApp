@@ -200,6 +200,7 @@ class CircleRepository {
 
         db.collection("circles")
             .whereArrayContains("members", uid)
+            .whereEqualTo("status", "open")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
                     onError(e)

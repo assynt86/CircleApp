@@ -1,6 +1,7 @@
 package com.example.circleapp.ui.views
 
 import android.app.Application
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.Card
@@ -41,51 +44,32 @@ import coil.compose.AsyncImage
 import com.example.circleapp.ui.viewmodels.CircleUiState
 import com.example.circleapp.ui.viewmodels.CircleViewModel
 import com.example.circleapp.ui.viewmodels.CircleViewModelFactory
-import com.google.accompanist.pager.ExperimentalPagerApi
-import com.google.accompanist.pager.HorizontalPager
-import com.google.accompanist.pager.rememberPagerState
 
 @Composable
 fun CircleView(
     circleId: String,
     onBack: () -> Unit,
-    onPhotoSaved: (String?) -> Unit,
+    onCameraClick: (String) -> Unit
 ) {
     val application = LocalContext.current.applicationContext as Application
     val factory = CircleViewModelFactory(application, circleId)
     val viewModel: CircleViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
 
-    if (uiState.showCamera) {
-        CameraView(
-            circles = uiState.userCircles,
-            selectedCircleIds = uiState.userCircles.map { it.id }, // Select all circles by default
-            onPhotoSaved = { uri, circleIds ->
-                viewModel.uploadPhotos(uri, circleIds) { isSuccess ->
-                    if (isSuccess) {
-                        circleIds.forEach { cId -> onPhotoSaved(cId) }
-                    }
-                }
-            },
-            onCancel = { viewModel.onShowCamera(false) },
-            onCircleSelected = { _, _ -> /* NO-OP */ }
-        )
-    } else {
-        CircleViewContent(
-            uiState = uiState,
-            onBack = onBack,
-            onShowCamera = { viewModel.onShowCamera(true) },
-            onSetFullscreenImage = { viewModel.onSetFullscreenImage(it) }
-        )
-    }
+    CircleViewContent(
+        uiState = uiState,
+        onBack = onBack,
+        onShowCamera = { onCameraClick(circleId) },
+        onSetFullscreenImage = { viewModel.onSetFullscreenImage(it) }
+    )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPagerApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CircleViewContent(
     uiState: CircleUiState,
     onBack: () -> Unit,
-    onShowCamera: (Boolean) -> Unit,
+    onShowCamera: () -> Unit,
     onSetFullscreenImage: (Int?) -> Unit
 ) {
     Scaffold(
@@ -95,7 +79,7 @@ fun CircleViewContent(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     if (uiState.circleInfo?.status == "open") {
-                        IconButton(onClick = { onShowCamera(true) }) {
+                        IconButton(onClick = onShowCamera) {
                             Icon(Icons.Filled.CameraAlt, contentDescription = "Take Photo")
                         }
                     }
@@ -179,9 +163,10 @@ fun CircleViewContent(
 
     if (uiState.fullscreenImage != null) {
         Dialog(onDismissRequest = { onSetFullscreenImage(null) }) {
-            val pagerState = rememberPagerState(initialPage = uiState.fullscreenImage)
+            val pagerState = rememberPagerState(initialPage = uiState.fullscreenImage) {
+                uiState.photos.size
+            }
             HorizontalPager(
-                count = uiState.photos.size,
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
