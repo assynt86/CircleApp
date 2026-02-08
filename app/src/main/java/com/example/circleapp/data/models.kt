@@ -37,3 +37,13 @@ data class PhotoItem(
     val createdAt: Timestamp?,
     var downloadUrl: String? = null
 )
+
+data class UserProfile(
+    val uid: String = "",
+    val email: String = "",
+    val username: String = "",
+    val phone: String = "",
+    val displayName: String = "",
+    val createdAt: Timestamp? = null
+)
+

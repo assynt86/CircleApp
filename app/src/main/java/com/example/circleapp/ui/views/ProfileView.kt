@@ -17,7 +17,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.circleapp.ui.viewmodels.ProfileViewModel
 
 @Composable
-fun ProfileView(profileViewModel: ProfileViewModel = viewModel()) {
+fun ProfileView(
+    onLogout: () -> Unit,
+    profileViewModel: ProfileViewModel = viewModel()
+){
     val name by profileViewModel.name
     val username by profileViewModel.username
     val email by profileViewModel.email
@@ -111,7 +114,7 @@ fun ProfileView(profileViewModel: ProfileViewModel = viewModel()) {
 
         // Log Out Button
         Button(
-            onClick = { /* TODO: Implement Log Out */ },
+            onClick = onLogout,
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
