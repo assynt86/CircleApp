@@ -135,11 +135,33 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         }
     }
 
-    fun uploadPhotos(uri: Uri, circleIds: List<String>, onComplete: (Boolean) -> Unit) {
+    fun uploadPhotos(uris: List<Uri>, circleIds: List<String>, onComplete: (Boolean) -> Unit) {
         _uiState.update { it.copy(isUploading = true) }
-        repository.addPhotoToCircles(uri, circleIds) { isSuccess ->
-            _uiState.update { it.copy(isUploading = false, showCamera = false) }
-            onComplete(isSuccess)
+
+        val totalPhotos = uris.size
+        if (totalPhotos == 0) {
+            _uiState.update { it.copy(isUploading = false) }
+            onComplete(true)
+            return
+        }
+
+        var completedUploads = 0
+        var successfulUploads = 0
+        val lock = Any()
+
+        uris.forEach { uri ->
+            repository.addPhotoToCircles(uri, circleIds) { isSuccess ->
+                synchronized(lock) {
+                    completedUploads++
+                    if (isSuccess) {
+                        successfulUploads++
+                    }
+                    if (completedUploads == totalPhotos) {
+                        _uiState.update { it.copy(isUploading = false, showCamera = false) }
+                        onComplete(successfulUploads == totalPhotos)
+                    }
+                }
+            }
         }
     }
 

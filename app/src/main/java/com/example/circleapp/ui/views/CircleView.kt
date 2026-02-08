@@ -1,6 +1,9 @@
 package com.example.circleapp.ui.views
 
 import android.app.Application
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,11 +60,25 @@ fun CircleView(
     val viewModel: CircleViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
 
+    val multiplePhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(20),
+        onResult = { uris ->
+            if (uris.isNotEmpty()) {
+                viewModel.uploadPhotos(uris, listOf(circleId)) { }
+            }
+        }
+    )
+
     CircleViewContent(
         uiState = uiState,
         onBack = onBack,
         onShowCamera = { onCameraClick(circleId) },
-        onSetFullscreenImage = { viewModel.onSetFullscreenImage(it) }
+        onSetFullscreenImage = { viewModel.onSetFullscreenImage(it) },
+        onUploadPhoto = {
+            multiplePhotoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
     )
 }
 
@@ -70,7 +88,8 @@ fun CircleViewContent(
     uiState: CircleUiState,
     onBack: () -> Unit,
     onShowCamera: () -> Unit,
-    onSetFullscreenImage: (Int?) -> Unit
+    onSetFullscreenImage: (Int?) -> Unit,
+    onUploadPhoto: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -79,6 +98,9 @@ fun CircleViewContent(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     if (uiState.circleInfo?.status == "open") {
+                        IconButton(onClick = onUploadPhoto) {
+                            Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
+                        }
                         IconButton(onClick = onShowCamera) {
                             Icon(Icons.Filled.CameraAlt, contentDescription = "Take Photo")
                         }
