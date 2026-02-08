@@ -26,6 +26,11 @@ import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
 import com.example.circleapp.ui.views.ProfileView
 import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
+import com.example.circleapp.ui.views.AuthView
+import com.example.circleapp.ui.viewmodels.AuthViewModel
+
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,10 +49,29 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-    val homeViewModel: HomeViewModel = viewModel()
     val coroutineScope = rememberCoroutineScope()
 
-    NavHost(navController = navController, startDestination = "main") {
+    // Gate the app: if not signed in, start at auth screen
+    val isSignedIn = FirebaseAuth.getInstance().currentUser != null
+    val startDest = if (isSignedIn) "main" else "auth"
+
+    NavHost(navController = navController, startDestination = startDest) {
+
+        // -------- AUTH SCREEN --------
+        composable("auth") {
+            val authVm: AuthViewModel = viewModel()
+            AuthView(
+                authViewModel = authVm,
+                onAuthed = {
+                    // After login/signup, go to main and remove auth from back stack
+                    navController.navigate("main") {
+                        popUpTo("auth") { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // -------- MAIN (Pager) --------
         composable(
             route = "main?startPage={startPage}&circleId={circleId}",
             arguments = listOf(
@@ -61,6 +85,9 @@ fun AppNavigation() {
                 }
             )
         ) { backStackEntry ->
+
+            val homeViewModel: HomeViewModel = viewModel()
+
             val startPage = backStackEntry.arguments?.getInt("startPage") ?: 1
             val circleId = backStackEntry.arguments?.getString("circleId")
 
@@ -87,6 +114,7 @@ fun AppNavigation() {
                         onUploadsComplete = {},
                         onUploadFailed = { _, _ -> }
                     )
+
                     1 -> HomeView(
                         homeViewModel = homeViewModel,
                         onCircleClick = { newCircleId ->
@@ -99,10 +127,20 @@ fun AppNavigation() {
                             navController.navigate("circle/$newCircleId")
                         }
                     )
-                    2 -> ProfileView()
+
+                    2 -> ProfileView(
+                        onLogout = {
+                            FirebaseAuth.getInstance().signOut()
+                            navController.navigate("auth") {
+                                popUpTo("main") { inclusive = true }
+                            }
+                        }
+                    )
                 }
             }
         }
+
+        // -------- Circle Detail --------
         composable(
             route = "circle/{circleId}",
             arguments = listOf(navArgument("circleId") { type = NavType.StringType })
