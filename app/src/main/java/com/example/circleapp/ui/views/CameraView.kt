@@ -81,9 +81,7 @@ fun CameraView(
 
     LaunchedEffect(Unit) {
         permissionLauncher.launch(Manifest.permission.CAMERA)
-        entryPointCircleId?.let {
-            homeViewModel.onCircleSelected(it, true)
-        }
+        homeViewModel.handleCameraEntry(entryPointCircleId)
     }
 
     if (!uiState.hasCameraPermission) {
