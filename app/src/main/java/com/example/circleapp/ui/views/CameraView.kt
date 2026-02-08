@@ -57,6 +57,7 @@ fun CameraView(
     homeViewModel: HomeViewModel,
     entryPointCircleId: String?,
     onCancel: () -> Unit,
+    onUploadsComplete: () -> Unit,
     onUploadFailed: (String, String) -> Unit
 ) {
     val context = LocalContext.current
@@ -200,27 +201,10 @@ fun CameraView(
                         object : ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                                 val savedUri = Uri.fromFile(photoFile)
-                                val totalCircles = uiState.selectedCircleIds.size
-                                var uploadedCount = 0
-                                var failedCount = 0
-
-                                fun checkCompletion() {
-                                    if (uploadedCount + failedCount == totalCircles) {
-                                        onCancel()
-                                    }
-                                }
-
                                 homeViewModel.uploadPhotoToCircles(
                                     uri = savedUri,
-                                    onPhotoUploaded = {
-                                        uploadedCount++
-                                        checkCompletion()
-                                    },
-                                    onUploadFailed = { circleId, reason ->
-                                        failedCount++
-                                        onUploadFailed(circleId, reason)
-                                        checkCompletion()
-                                    }
+                                    onUploadsComplete = onUploadsComplete,
+                                    onUploadFailed = onUploadFailed
                                 )
                             }
 
