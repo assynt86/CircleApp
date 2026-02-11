@@ -212,21 +212,32 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         viewModelScope.launch {
             val photosToDownload = _uiState.value.photos.filter { it.id in _uiState.value.selectedPhotos }
             photosToDownload.forEach { photo ->
-                if (photo.storagePath.isBlank() || _uiState.value.inProgressSaves.contains(photo.id)) return@forEach
-
-                _uiState.update { it.copy(inProgressSaves = it.inProgressSaves + photo.id) }
-
-                try {
-                    val bytes = FirebaseStorage.getInstance().reference.child(photo.storagePath).getBytes(10L * 1024 * 1024).await()
-                    saveJpegToGallery(getApplication(), bytes, "Circle_${circleId}_${photo.id}", "Pictures/Circle")
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                } finally {
-                    _uiState.update { it.copy(inProgressSaves = it.inProgressSaves - photo.id) }
-                }
+                downloadPhotoById(photo.id)
             }
             // After downloading, exit selection mode
             toggleSelectionMode()
+        }
+    }
+
+    fun savePhoto(photoId: String) {
+        viewModelScope.launch {
+            downloadPhotoById(photoId)
+        }
+    }
+
+    private suspend fun downloadPhotoById(photoId: String) {
+        val photo = _uiState.value.photos.find { it.id == photoId } ?: return
+        if (photo.storagePath.isBlank() || _uiState.value.inProgressSaves.contains(photo.id)) return
+
+        _uiState.update { it.copy(inProgressSaves = it.inProgressSaves + photo.id) }
+
+        try {
+            val bytes = FirebaseStorage.getInstance().reference.child(photo.storagePath).getBytes(10L * 1024 * 1024).await()
+            saveJpegToGallery(getApplication(), bytes, "Circle_${circleId}_${photo.id}", "Pictures/Circle")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            _uiState.update { it.copy(inProgressSaves = it.inProgressSaves - photo.id) }
         }
     }
 
