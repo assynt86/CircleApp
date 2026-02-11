@@ -36,6 +36,8 @@ class HomeViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    private var initialSelectionDone = false
+
     init {
         loadUserCircles()
     }
@@ -44,10 +46,16 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             repository.getUserCircles(
                 onSuccess = { circleList ->
-                    _uiState.update {
-                        it.copy(
+                    _uiState.update { currentState ->
+                        val selection = if (!initialSelectionDone) {
+                            initialSelectionDone = true
+                            circleList.filter { it.status == "open" }.map { it.id }
+                        } else {
+                            currentState.selectedCircleIds
+                        }
+                        currentState.copy(
                             circles = circleList,
-                            selectedCircleIds = circleList.filter { circle -> circle.status == "open" }.map { circle -> circle.id }
+                            selectedCircleIds = selection
                         )
                     }
                 },
@@ -136,11 +144,20 @@ class HomeViewModel : ViewModel() {
     fun onCircleSelected(circleId: String, isSelected: Boolean) {
         _uiState.update { currentState ->
             val newSelectedIds = if (isSelected) {
-                currentState.selectedCircleIds + circleId
+                (currentState.selectedCircleIds + circleId).distinct()
             } else {
                 currentState.selectedCircleIds - circleId
             }
             currentState.copy(selectedCircleIds = newSelectedIds)
+        }
+    }
+
+    fun handleCameraEntry(entryPointCircleId: String?) {
+        if (entryPointCircleId != null) {
+            initialSelectionDone = true
+            _uiState.update {
+                it.copy(selectedCircleIds = listOf(entryPointCircleId))
+            }
         }
     }
 
