@@ -29,7 +29,9 @@ data class CircleUiState(
     val remainingTime: String = "",
     val showCamera: Boolean = false,
     val fullscreenImage: Int? = null,
-    val inProgressSaves: List<String> = emptyList()
+    val inProgressSaves: List<String> = emptyList(),
+    val inSelectionMode: Boolean = false,
+    val selectedPhotos: Set<String> = emptySet()
 )
 
 class CircleViewModel(application: Application, private val circleId: String) : AndroidViewModel(application) {
@@ -122,9 +124,9 @@ class CircleViewModel(application: Application, private val circleId: String) : 
 
                 try {
                     val bytes = FirebaseStorage.getInstance().reference.child(photo.storagePath).getBytes(10L * 1024 * 1024).await()
-                    saveJpegToGallery(getApplication(), bytes, "Circle_${circleId}_${photo.id}", "Pictures/Circle")?.let {
+                    val savedUri = saveJpegToGallery(getApplication(), bytes, "Circle_${circleId}_${photo.id}", "Pictures/Circle")
+                    if (savedUri != null) {
                         savedPhotosStore.markSaved(circleId, photo.id)
-                        // Optionally notify UI of successful save
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -178,6 +180,57 @@ class CircleViewModel(application: Application, private val circleId: String) : 
     }
 
     fun onSetFullscreenImage(index: Int?) {
-        _uiState.update { it.copy(fullscreenImage = index) }
+        if (!_uiState.value.inSelectionMode) {
+            _uiState.update { it.copy(fullscreenImage = index) }
+        }
+    }
+
+    fun toggleSelectionMode() {
+        _uiState.update {
+            val inSelectionMode = !it.inSelectionMode
+            if (!inSelectionMode) { // when turning off selection mode
+                it.copy(inSelectionMode = false, selectedPhotos = emptySet())
+            } else {
+                it.copy(inSelectionMode = true)
+            }
+        }
+    }
+
+    fun togglePhotoSelection(photoId: String) {
+        _uiState.update {
+            val selectedPhotos = it.selectedPhotos.toMutableSet()
+            if (selectedPhotos.contains(photoId)) {
+                selectedPhotos.remove(photoId)
+            } else {
+                selectedPhotos.add(photoId)
+            }
+            it.copy(selectedPhotos = selectedPhotos)
+        }
+    }
+
+    fun downloadSelectedPhotos() {
+        viewModelScope.launch {
+            val photosToDownload = _uiState.value.photos.filter { it.id in _uiState.value.selectedPhotos }
+            photosToDownload.forEach { photo ->
+                if (photo.storagePath.isBlank() || _uiState.value.inProgressSaves.contains(photo.id)) return@forEach
+
+                _uiState.update { it.copy(inProgressSaves = it.inProgressSaves + photo.id) }
+
+                try {
+                    val bytes = FirebaseStorage.getInstance().reference.child(photo.storagePath).getBytes(10L * 1024 * 1024).await()
+                    saveJpegToGallery(getApplication(), bytes, "Circle_${circleId}_${photo.id}", "Pictures/Circle")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                } finally {
+                    _uiState.update { it.copy(inProgressSaves = it.inProgressSaves - photo.id) }
+                }
+            }
+            // After downloading, exit selection mode
+            toggleSelectionMode()
+        }
+    }
+
+    fun clearSelection() {
+        _uiState.update { it.copy(selectedPhotos = emptySet()) }
     }
 }
