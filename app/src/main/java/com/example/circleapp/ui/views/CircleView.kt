@@ -5,8 +5,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -41,6 +44,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +53,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.circleapp.ui.viewmodels.CircleUiState
@@ -88,6 +93,7 @@ fun CircleView(
         onToggleSelectionMode = { viewModel.toggleSelectionMode() },
         onTogglePhotoSelection = { viewModel.togglePhotoSelection(it) },
         onDownloadSelectedPhotos = { viewModel.downloadSelectedPhotos() },
+        onSavePhoto = { viewModel.savePhoto(it) }
     )
 }
 
@@ -101,7 +107,8 @@ fun CircleViewContent(
     onUploadPhoto: () -> Unit,
     onToggleSelectionMode: () -> Unit,
     onTogglePhotoSelection: (String) -> Unit,
-    onDownloadSelectedPhotos: () -> Unit
+    onDownloadSelectedPhotos: () -> Unit,
+    onSavePhoto: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -227,21 +234,66 @@ fun CircleViewContent(
         }
     }
 
-    if (uiState.fullscreenImage != null) {
-        Dialog(onDismissRequest = { onSetFullscreenImage(null) }) {
-            val pagerState = rememberPagerState(initialPage = uiState.fullscreenImage) {
+    val fullscreenImageIndex = uiState.fullscreenImage
+    if (fullscreenImageIndex != null) {
+        Dialog(
+            onDismissRequest = { onSetFullscreenImage(null) },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            val pagerState = rememberPagerState(initialPage = fullscreenImageIndex) {
                 uiState.photos.size
             }
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                AsyncImage(
-                    model = uiState.photos[page].downloadUrl,
-                    contentDescription = "Full screen image",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onSetFullscreenImage(null) }
+            ) {
+                // Keep the pager moved up
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 200.dp),
+                    pageSpacing = 16.dp,
+                    beyondViewportPageCount = 2
+                ) { page ->
+                    AsyncImage(
+                        model = uiState.photos[page].downloadUrl,
+                        contentDescription = "Full screen image",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+
+                // Lowered the save button slightly (from 220dp to 120dp)
+                val currentPhotoId = uiState.photos.getOrNull(pagerState.currentPage)?.id
+                if (currentPhotoId != null) {
+                    val isSaving = uiState.inProgressSaves.contains(currentPhotoId)
+                    IconButton(
+                        onClick = { onSavePhoto(currentPhotoId) },
+                        enabled = !isSaving,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 180.dp)
+                            .size(64.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                    ) {
+                        if (isSaving) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Download,
+                                contentDescription = "Save to gallery",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
