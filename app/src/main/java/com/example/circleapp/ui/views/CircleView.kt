@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -78,7 +84,10 @@ fun CircleView(
             multiplePhotoPickerLauncher.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )
-        }
+        },
+        onToggleSelectionMode = { viewModel.toggleSelectionMode() },
+        onTogglePhotoSelection = { viewModel.togglePhotoSelection(it) },
+        onDownloadSelectedPhotos = { viewModel.downloadSelectedPhotos() },
     )
 }
 
@@ -89,7 +98,10 @@ fun CircleViewContent(
     onBack: () -> Unit,
     onShowCamera: () -> Unit,
     onSetFullscreenImage: (Int?) -> Unit,
-    onUploadPhoto: () -> Unit
+    onUploadPhoto: () -> Unit,
+    onToggleSelectionMode: () -> Unit,
+    onTogglePhotoSelection: (String) -> Unit,
+    onDownloadSelectedPhotos: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -97,12 +109,24 @@ fun CircleViewContent(
                 title = { Text(uiState.circleInfo?.name ?: "Circle") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
-                    if (uiState.circleInfo?.status == "open") {
-                        IconButton(onClick = onUploadPhoto) {
-                            Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
+                    if (uiState.inSelectionMode) {
+                        IconButton(onClick = onDownloadSelectedPhotos) {
+                            Icon(Icons.Filled.Download, contentDescription = "Download Selected Photos")
                         }
-                        IconButton(onClick = onShowCamera) {
-                            Icon(Icons.Filled.CameraAlt, contentDescription = "Take Photo")
+                        IconButton(onClick = onToggleSelectionMode) {
+                            Icon(Icons.Filled.Cancel, contentDescription = "Cancel Selection")
+                        }
+                    } else {
+                        IconButton(onClick = onToggleSelectionMode) {
+                            Icon(Icons.Filled.SelectAll, contentDescription = "Select Photos")
+                        }
+                        if (uiState.circleInfo?.status == "open") {
+                            IconButton(onClick = onUploadPhoto) {
+                                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
+                            }
+                            IconButton(onClick = onShowCamera) {
+                                Icon(Icons.Filled.CameraAlt, contentDescription = "Take Photo")
+                            }
                         }
                     }
                 }
@@ -159,9 +183,21 @@ fun CircleViewContent(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) { itemsIndexed(uiState.photos) { index, p ->
+                        val isSelected = uiState.selectedPhotos.contains(p.id)
                         Card(modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSetFullscreenImage(index) }) {
+                            .clickable {
+                                if (uiState.inSelectionMode) {
+                                    onTogglePhotoSelection(p.id)
+                                } else {
+                                    onSetFullscreenImage(index)
+                                }
+                            }
+                            .border(
+                                width = if (isSelected) 4.dp else 0.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                            )
+                        ) {
                             Box(contentAlignment = Alignment.TopEnd) {
                                 AsyncImage(
                                     model = p.downloadUrl,
@@ -172,6 +208,14 @@ fun CircleViewContent(
                                         .clip(MaterialTheme.shapes.medium),
                                     contentScale = ContentScale.Crop
                                 )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CheckCircle,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
                                 if (uiState.inProgressSaves.contains(p.id)) {
                                     CircularProgressIndicator(modifier = Modifier.padding(4.dp))
                                 }
