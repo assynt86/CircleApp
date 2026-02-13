@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Card
@@ -93,7 +95,9 @@ fun CircleView(
         onToggleSelectionMode = { viewModel.toggleSelectionMode() },
         onTogglePhotoSelection = { viewModel.togglePhotoSelection(it) },
         onDownloadSelectedPhotos = { viewModel.downloadSelectedPhotos() },
-        onSavePhoto = { viewModel.savePhoto(it) }
+        onSavePhoto = { viewModel.savePhoto(it) },
+        onDeletePhoto = { viewModel.deletePhoto(it) },
+        onDeleteSelectedPhotos = { viewModel.deleteSelectedPhotos() }
     )
 }
 
@@ -108,7 +112,9 @@ fun CircleViewContent(
     onToggleSelectionMode: () -> Unit,
     onTogglePhotoSelection: (String) -> Unit,
     onDownloadSelectedPhotos: () -> Unit,
-    onSavePhoto: (String) -> Unit
+    onSavePhoto: (String) -> Unit,
+    onDeletePhoto: (String) -> Unit,
+    onDeleteSelectedPhotos: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -117,6 +123,17 @@ fun CircleViewContent(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     if (uiState.inSelectionMode) {
+                        val canDeleteAll = uiState.selectedPhotos.isNotEmpty() && uiState.selectedPhotos.all { id ->
+                            val p = uiState.photos.find { it.id == id }
+                            p != null && (p.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid)
+                        }
+                        IconButton(onClick = onDeleteSelectedPhotos, enabled = canDeleteAll) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Delete Selected Photos",
+                                tint = if (canDeleteAll) MaterialTheme.colorScheme.error else Color.Gray
+                            )
+                        }
                         IconButton(onClick = onDownloadSelectedPhotos) {
                             Icon(Icons.Filled.Download, contentDescription = "Download Selected Photos")
                         }
@@ -269,28 +286,55 @@ fun CircleViewContent(
                     )
                 }
 
-                // Lowered the save button slightly (from 220dp to 120dp)
-                val currentPhotoId = uiState.photos.getOrNull(pagerState.currentPage)?.id
-                if (currentPhotoId != null) {
-                    val isSaving = uiState.inProgressSaves.contains(currentPhotoId)
-                    IconButton(
-                        onClick = { onSavePhoto(currentPhotoId) },
-                        enabled = !isSaving,
+                val currentPhoto = uiState.photos.getOrNull(pagerState.currentPage)
+                if (currentPhoto != null) {
+                    val isSaving = uiState.inProgressSaves.contains(currentPhoto.id)
+                    val canDelete = currentPhoto.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid
+                    val isDeleting = uiState.deletingPhotos.contains(currentPhoto.id)
+
+                    Row(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 180.dp)
-                            .size(64.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                            .padding(bottom = 180.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Download,
-                                contentDescription = "Save to gallery",
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
+                        IconButton(
+                            onClick = { onSavePhoto(currentPhoto.id) },
+                            enabled = !isSaving,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Download,
+                                    contentDescription = "Save to gallery",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { onDeletePhoto(currentPhoto.id) },
+                            enabled = canDelete && !isDeleting,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                        ) {
+                            if (isDeleting) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Delete photo",
+                                    tint = if (canDelete) Color.White else Color.Gray,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
                         }
                     }
                 }

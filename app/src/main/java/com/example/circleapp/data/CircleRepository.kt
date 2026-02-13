@@ -15,6 +15,8 @@ class CircleRepository {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
+    fun getCurrentUserUid(): String? = auth.currentUser?.uid
+
     /**
      * Creates a circle with:
      * - closeAt = now + durationDays
@@ -230,7 +232,8 @@ class CircleRepository {
                     val invite = snap.getString("inviteCode") ?: ""
                     val status = snap.getString("status") ?: "open"
                     val closeAt = snap.getTimestamp("closeAt")
-                    onSuccess(CircleInfo(name, invite, status, closeAt))
+                    val ownerUid = snap.getString("ownerUid") ?: ""
+                    onSuccess(CircleInfo(name, invite, status, closeAt, ownerUid))
                 } else {
                     onError(Exception("Circle not found"))
                 }
@@ -272,6 +275,28 @@ class CircleRepository {
         FirebaseStorage.getInstance().reference.child(storagePath).downloadUrl
             .addOnSuccessListener { uri -> onResult(uri.toString()) }
             .addOnFailureListener { onResult(null) }
+    }
+
+    fun deletePhoto(
+        circleId: String,
+        photoId: String,
+        storagePath: String,
+        onResult: (Boolean) -> Unit
+    ) {
+        // 1) Delete from Storage
+        FirebaseStorage.getInstance().reference.child(storagePath).delete()
+            .addOnCompleteListener { storageTask ->
+                // Even if storage fails (e.g. file already gone), try to delete Firestore doc
+                // 2) Delete from Firestore
+                db.collection("circles")
+                    .document(circleId)
+                    .collection("photos")
+                    .document(photoId)
+                    .delete()
+                    .addOnCompleteListener { firestoreTask ->
+                        onResult(firestoreTask.isSuccessful)
+                    }
+            }
     }
 
 

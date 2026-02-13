@@ -31,7 +31,9 @@ data class CircleUiState(
     val fullscreenImage: Int? = null,
     val inProgressSaves: List<String> = emptyList(),
     val inSelectionMode: Boolean = false,
-    val selectedPhotos: Set<String> = emptySet()
+    val selectedPhotos: Set<String> = emptySet(),
+    val currentUserUid: String? = null,
+    val deletingPhotos: Set<String> = emptySet()
 )
 
 class CircleViewModel(application: Application, private val circleId: String) : AndroidViewModel(application) {
@@ -43,6 +45,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
     val uiState: StateFlow<CircleUiState> = _uiState.asStateFlow()
 
     init {
+        _uiState.update { it.copy(currentUserUid = repository.getCurrentUserUid()) }
         listenToCircle()
         listenToPhotos()
         loadUserCircles()
@@ -239,6 +242,25 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         } finally {
             _uiState.update { it.copy(inProgressSaves = it.inProgressSaves - photo.id) }
         }
+    }
+
+    fun deletePhoto(photoId: String) {
+        val photo = _uiState.value.photos.find { it.id == photoId } ?: return
+        _uiState.update { it.copy(deletingPhotos = it.deletingPhotos + photoId) }
+        repository.deletePhoto(circleId, photo.id, photo.storagePath) { success ->
+            _uiState.update { it.copy(deletingPhotos = it.deletingPhotos - photoId) }
+            if (success && _uiState.value.fullscreenImage != null) {
+                _uiState.update { it.copy(fullscreenImage = null) }
+            }
+        }
+    }
+
+    fun deleteSelectedPhotos() {
+        val selected = _uiState.value.selectedPhotos.toList()
+        selected.forEach { photoId ->
+            deletePhoto(photoId)
+        }
+        toggleSelectionMode()
     }
 
     fun clearSelection() {

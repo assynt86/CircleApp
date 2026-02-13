@@ -27,7 +27,8 @@ data class CircleInfo(
     val name: String,
     val inviteCode: String,
     val status: String,
-    val closeAt: Timestamp?
+    val closeAt: Timestamp?,
+    val ownerUid: String
 )
 
 data class PhotoItem(
@@ -46,4 +47,3 @@ data class UserProfile(
     val displayName: String = "",
     val createdAt: Timestamp? = null
 )
-
