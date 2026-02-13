@@ -25,6 +25,34 @@ fun ProfileView(
     val username by profileViewModel.username
     val email by profileViewModel.email
     val phone by profileViewModel.phone
+    val isAutoSaveEnabled by profileViewModel.isAutoSaveEnabled
+
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    if (showSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("Settings") },
+            text = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Auto-save photos to gallery")
+                    Switch(
+                        checked = isAutoSaveEnabled,
+                        onCheckedChange = { profileViewModel.toggleAutoSave(it) }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSettingsDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -103,7 +131,7 @@ fun ProfileView(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = { /* TODO: Implement Settings screen navigation */ },
+                onClick = { showSettingsDialog = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Settings, contentDescription = "Settings")

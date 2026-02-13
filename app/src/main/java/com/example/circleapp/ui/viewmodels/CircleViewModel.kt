@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -119,6 +120,9 @@ class CircleViewModel(application: Application, private val circleId: String) : 
 
     private fun autoSaveNewPhotos(photos: List<PhotoItem>) {
         viewModelScope.launch {
+            // Check if auto-save is enabled
+            if (!savedPhotosStore.autoSaveFlow.first()) return@launch
+
             photos.forEach { photo ->
                 if (photo.storagePath.isBlank() || _uiState.value.inProgressSaves.contains(photo.id)) return@forEach
                 if (savedPhotosStore.isSaved(circleId, photo.id)) return@forEach
