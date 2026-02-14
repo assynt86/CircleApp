@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,12 +53,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.circleapp.R
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
 import java.util.concurrent.TimeUnit
@@ -112,7 +116,13 @@ fun HomeViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("CircleApp") },
+                title = { 
+                    Image(
+                        painter = painterResource(id = R.drawable.app_logo),
+                        contentDescription = stringResource(R.string.app_name),
+                        modifier = Modifier.height(32.dp)
+                    )
+                },
                 actions = {
                     IconButton(onClick = { onShowJoinCircleDialog(true) }) {
                         Icon(Icons.Filled.GroupAdd, contentDescription = "Join Circle")
@@ -130,12 +140,12 @@ fun HomeViewContent(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Text("Your Circles", style = MaterialTheme.typography.titleMedium)
+            Text("Your crcles", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(16.dp))
 
             if (uiState.circles.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No circles yet. Create or join one!")
+                    Text("No crcles yet. Create or join one!")
                 }
             } else {
                 LazyVerticalGrid(
