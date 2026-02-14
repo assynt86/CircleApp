@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,7 +33,9 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,14 +49,18 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -116,6 +123,8 @@ fun CircleViewContent(
     onDeletePhoto: (String) -> Unit,
     onDeleteSelectedPhotos: () -> Unit
 ) {
+    var showInviteDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -141,6 +150,9 @@ fun CircleViewContent(
                             Icon(Icons.Filled.Cancel, contentDescription = "Cancel Selection")
                         }
                     } else {
+                        IconButton(onClick = { showInviteDialog = true }) {
+                            Icon(Icons.Filled.GroupAdd, contentDescription = "Invite People")
+                        }
                         IconButton(onClick = onToggleSelectionMode) {
                             Icon(Icons.Filled.SelectAll, contentDescription = "Select Photos")
                         }
@@ -249,6 +261,37 @@ fun CircleViewContent(
                 }
             }
         }
+    }
+
+    if (showInviteDialog && uiState.circleInfo != null) {
+        AlertDialog(
+            onDismissRequest = { showInviteDialog = false },
+            title = { Text("Invite to ${uiState.circleInfo?.name}") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    val inviteCode = uiState.circleInfo!!.inviteCode
+                    val bitmap = remember(inviteCode) {
+                        generateQRCode(inviteCode)
+                    }
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Invite QR Code",
+                            modifier = Modifier
+                                .size(200.dp)
+                                .border(1.dp, Color.Black)
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(inviteCode, style = MaterialTheme.typography.headlineLarge, letterSpacing = 5.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showInviteDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 
     val fullscreenImageIndex = uiState.fullscreenImage

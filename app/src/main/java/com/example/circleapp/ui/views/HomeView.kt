@@ -1,6 +1,9 @@
 package com.example.circleapp.ui.views
 
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,6 +44,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +56,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
@@ -214,20 +221,57 @@ fun HomeViewContent(
     }
 
     if (uiState.isJoinCircleDialogVisible) {
+        val context = LocalContext.current
+        var hasCameraPermission by remember {
+            mutableStateOf(
+                ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+            )
+        }
+
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+            onResult = { granted -> hasCameraPermission = granted }
+        )
+
         AlertDialog(
             onDismissRequest = { onShowJoinCircleDialog(false) },
             title = { Text("Join a Circle") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(250.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .background(Color.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("QR Scanner Preview Here", color = Color.White)
+                    if (hasCameraPermission) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(250.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                        ) {
+                            var lastScannedCode by remember { mutableStateOf("") }
+                            QRScanner(
+                                modifier = Modifier.fillMaxSize(),
+                                onQrCodeScanned = { code ->
+                                    if (code.length == 6 && code != lastScannedCode) {
+                                        lastScannedCode = code
+                                        onInviteCodeChange(code)
+                                        onJoinCircle()
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(250.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(Color.Gray)
+                                .clickable { permissionLauncher.launch(android.Manifest.permission.CAMERA) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Tap to enable Camera", color = Color.White)
+                        }
                     }
                     Spacer(Modifier.height(16.dp))
                     Text("Or enter code manually")
