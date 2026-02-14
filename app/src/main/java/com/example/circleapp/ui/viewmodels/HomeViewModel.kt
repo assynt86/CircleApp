@@ -1,13 +1,16 @@
 package com.example.circleapp.ui.viewmodels
 
+import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.circleapp.data.Circle
+import com.example.circleapp.data.CirclePreferencesStore
 import com.example.circleapp.data.CircleRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -29,9 +32,10 @@ data class HomeUiState(
     val cameraNavigationState: CameraNavigationState = CameraNavigationState()
 )
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = CircleRepository()
+    private val prefsStore = CirclePreferencesStore(application)
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -44,12 +48,21 @@ class HomeViewModel : ViewModel() {
 
     private fun loadUserCircles() {
         viewModelScope.launch {
+            // Load saved selections first
+            val savedSelection = prefsStore.selectedCircleIdsFlow.first()
+            
             repository.getUserCircles(
                 onSuccess = { circleList ->
                     _uiState.update { currentState ->
                         val selection = if (!initialSelectionDone) {
                             initialSelectionDone = true
-                            circleList.filter { it.status == "open" }.map { it.id }
+                            // Use saved selection if available and circles still exist
+                            if (savedSelection.isNotEmpty()) {
+                                val validIds = circleList.map { it.id }.toSet()
+                                savedSelection.filter { it in validIds }
+                            } else {
+                                circleList.filter { it.status == "open" }.map { it.id }
+                            }
                         } else {
                             currentState.selectedCircleIds
                         }
@@ -100,16 +113,18 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    fun setCapturing(isCapturing: Boolean) {
+        _uiState.update { it.copy(isCapturing = isCapturing) }
+    }
+
     fun uploadPhotoToCircles(
         uri: Uri,
         onUploadsComplete: () -> Unit,
         onUploadFailed: (String, String) -> Unit
     ) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isCapturing = true) }
             val selectedIds = _uiState.value.selectedCircleIds
             if (selectedIds.isEmpty()) {
-                _uiState.update { it.copy(isCapturing = false) }
                 onUploadsComplete()
                 return@launch
             }
@@ -120,7 +135,6 @@ class HomeViewModel : ViewModel() {
             fun checkCompletion() {
                 finishedCount++
                 if (finishedCount == totalCircles) {
-                    _uiState.update { it.copy(isCapturing = false) }
                     onUploadsComplete()
                 }
             }
@@ -148,6 +162,12 @@ class HomeViewModel : ViewModel() {
             } else {
                 currentState.selectedCircleIds - circleId
             }
+            
+            // Persist the new selection
+            viewModelScope.launch {
+                prefsStore.saveSelectedCircleIds(newSelectedIds.toSet())
+            }
+            
             currentState.copy(selectedCircleIds = newSelectedIds)
         }
     }
@@ -158,6 +178,8 @@ class HomeViewModel : ViewModel() {
             _uiState.update {
                 it.copy(selectedCircleIds = listOf(entryPointCircleId))
             }
+            // Optional: should we persist this auto-selection? 
+            // Probably not, usually user wants to return to their "global" selection.
         }
     }
 
