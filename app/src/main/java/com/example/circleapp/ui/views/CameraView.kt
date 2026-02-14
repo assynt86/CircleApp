@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -54,6 +57,7 @@ fun CameraView(
     
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
     
     var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
     var zoomLevel by remember { mutableFloatStateOf(0f) } 
@@ -62,6 +66,14 @@ fun CameraView(
     
     var showCirclesPopup by remember { mutableStateOf(false) }
     var showFlashUIEffect by remember { mutableStateOf(false) }
+    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+
+    var focusPoint by remember { mutableStateOf<Offset?>(null) }
+    val focusAlpha by animateFloatAsState(
+        targetValue = if (focusPoint != null) 1f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "FocusAlpha"
+    )
 
     // Observe zoom state for ratio display and ultrawide support
     val zoomState by (camera?.cameraInfo?.zoomState?.observeAsState()) ?: remember { mutableStateOf<ZoomState?>(null) }
@@ -81,6 +93,14 @@ fun CameraView(
         if (showZoomBar) {
             delay(1500)
             showZoomBar = false
+        }
+    }
+
+    // Auto-hide focus indicator
+    LaunchedEffect(focusPoint) {
+        if (focusPoint != null) {
+            delay(700)
+            focusPoint = null
         }
     }
 
@@ -112,6 +132,19 @@ fun CameraView(
             .fillMaxSize()
             .pointerInput(camera) {
                 if (camera == null) return@pointerInput
+                detectTapGestures { offset ->
+                    val factory = previewView?.meteringPointFactory ?: return@detectTapGestures
+                    val point = factory.createPoint(offset.x, offset.y)
+                    val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                        .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    
+                    focusPoint = offset
+                    camera?.cameraControl?.startFocusAndMetering(action)
+                }
+            }
+            .pointerInput(camera) {
+                if (camera == null) return@pointerInput
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     do {
@@ -129,37 +162,57 @@ fun CameraView(
                 }
             }
     ) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                val previewView = PreviewView(ctx)
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also { p ->
-                        p.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    val capture = ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .setFlashMode(flashMode)
-                        .build()
-                    imageCapture = capture
+        key(lensFacing) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    val view = PreviewView(ctx)
+                    previewView = view
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                    cameraProviderFuture.addListener({
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = Preview.Builder().build().also { p ->
+                            p.setSurfaceProvider(view.surfaceProvider)
+                        }
+                        val capture = ImageCapture.Builder()
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                            .setFlashMode(flashMode)
+                            .build()
+                        imageCapture = capture
 
-                    try {
-                        cameraProvider.unbindAll()
-                        camera = cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview,
-                            capture
-                        )
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }, ContextCompat.getMainExecutor(ctx))
-                previewView
+                        try {
+                            cameraProvider.unbindAll()
+                            camera = cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                CameraSelector.Builder().requireLensFacing(lensFacing).build(),
+                                preview,
+                                capture
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }, ContextCompat.getMainExecutor(ctx))
+                    view
+                }
+            )
+        }
+
+        // Focus Indicator
+        focusPoint?.let { point ->
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawCircle(
+                    color = Color.White.copy(alpha = focusAlpha),
+                    radius = 40.dp.toPx(),
+                    center = point,
+                    style = Stroke(width = 2.dp.toPx())
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = focusAlpha * 0.5f),
+                    radius = 2.dp.toPx(),
+                    center = point
+                )
             }
-        )
+        }
 
         // 3x3 Grid Overlay
         if (showGrid) {
@@ -378,6 +431,30 @@ fun CameraView(
                     contentDescription = "Capture photo",
                     tint = Color.White,
                     modifier = Modifier.size(64.dp)
+                )
+            }
+
+            // Flip Camera Button
+            IconButton(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 48.dp)
+                    .size(48.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                onClick = {
+                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                        CameraSelector.LENS_FACING_FRONT
+                    } else {
+                        CameraSelector.LENS_FACING_BACK
+                    }
+                    zoomLevel = 0f
+                    focusPoint = null
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.FlipCameraAndroid,
+                    contentDescription = "Flip camera",
+                    tint = Color.White
                 )
             }
         }
