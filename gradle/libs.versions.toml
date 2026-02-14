@@ -10,6 +10,8 @@ kotlin = "2.0.21"
 composeBom = "2024.09.00"
 googleServices = "4.4.2"
 materialIconsExtended = "1.6.8"
+zxing = "3.5.2"
+mlkitBarcode = "17.3.0"
 
 
 [libraries]
@@ -29,6 +31,8 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

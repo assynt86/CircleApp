@@ -58,7 +58,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    val cameraxVersion = "1.5.2" // check AndroidX releases if you want the latest
+    val cameraxVersion = "1.5.3" // check AndroidX releases if you want the latest
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
@@ -69,6 +69,10 @@ dependencies {
     implementation("com.google.firebase:firebase-storage")
     implementation("androidx.navigation:navigation-compose:2.8.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    
+    // QR Code
+    implementation(libs.zxing.core)
+    implementation(libs.mlkit.barcode.scanning)
 }
