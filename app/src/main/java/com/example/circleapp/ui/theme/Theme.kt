@@ -35,23 +35,22 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun CircleAppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // Forced off to ensure DarkColorScheme is used
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val context = LocalContext.current
+            dynamicDarkColorScheme(context)
+        }
+        else -> DarkColorScheme
     }
 
     MaterialTheme(
-      colorScheme = colorScheme,
-      typography = Typography,
-      content = content
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
     )
 }
