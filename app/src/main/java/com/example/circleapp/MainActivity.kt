@@ -77,7 +77,7 @@ fun AppNavigation() {
             arguments = listOf(
                 navArgument("startPage") {
                     type = NavType.IntType
-                    defaultValue = 1
+                    defaultValue = 0 // Changed from 1 to start on CameraView
                 },
                 navArgument("circleId") {
                     type = NavType.StringType
@@ -88,7 +88,7 @@ fun AppNavigation() {
 
             val homeViewModel: HomeViewModel = viewModel()
 
-            val startPage = backStackEntry.arguments?.getInt("startPage") ?: 1
+            val startPage = backStackEntry.arguments?.getInt("startPage") ?: 0
             val circleId = backStackEntry.arguments?.getString("circleId")
 
             val pagerState = rememberPagerState(initialPage = startPage) { 3 }

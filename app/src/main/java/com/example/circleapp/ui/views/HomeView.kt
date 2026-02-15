@@ -4,6 +4,9 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -15,10 +18,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -32,6 +37,7 @@ import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +48,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,17 +57,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.circleapp.R
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
@@ -76,28 +86,60 @@ fun HomeView(
     val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    HomeViewContent(
-        uiState = uiState,
-        onCircleClick = onCircleClick,
-        onJoinCircle = {
-            homeViewModel.joinCircle(
-                onSuccess = onJoinCircle,
-                onNotFound = { Toast.makeText(context, "Circle not found", Toast.LENGTH_SHORT).show() },
-                onError = { Toast.makeText(context, "Error joining circle", Toast.LENGTH_SHORT).show() }
-            )
-        },
-        onCreateCircle = {
-            homeViewModel.createCircle(
-                onSuccess = onCreateCircle,
-                onError = { Toast.makeText(context, "Error creating circle", Toast.LENGTH_SHORT).show() }
-            )
-        },
-        onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
-        onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
-        onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
-        onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
-        onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) }
-    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        HomeViewContent(
+            uiState = uiState,
+            onCircleClick = onCircleClick,
+            onJoinCircle = {
+                homeViewModel.joinCircle(
+                    onSuccess = onJoinCircle,
+                    onNotFound = { Toast.makeText(context, "Circle not found", Toast.LENGTH_SHORT).show() },
+                    onError = { Toast.makeText(context, "Error joining circle", Toast.LENGTH_SHORT).show() }
+                )
+            },
+            onCreateCircle = {
+                homeViewModel.createCircle(
+                    onSuccess = onCreateCircle,
+                    onError = { Toast.makeText(context, "Error creating circle", Toast.LENGTH_SHORT).show() }
+                )
+            },
+            onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
+            onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
+            onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
+            onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
+            onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) }
+        )
+
+        // Full screen loading overlay
+        AnimatedVisibility(
+            visible = uiState.isLoading,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        painter = painterResource(id = R.drawable.app_logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .height(100.dp)
+                            .width(200.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(Modifier.height(32.dp))
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,21 +158,34 @@ fun HomeViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
+                modifier = Modifier.height(120.dp),
                 title = { 
                     Image(
                         painter = painterResource(id = R.drawable.app_logo),
                         contentDescription = stringResource(R.string.app_name),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier
+                            .height(100.dp)
+                            .width(200.dp),
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.CenterStart
                     )
                 },
                 actions = {
-                    IconButton(onClick = { onShowJoinCircleDialog(true) }) {
-                        Icon(Icons.Filled.GroupAdd, contentDescription = "Join Circle")
+                    Row(
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { onShowJoinCircleDialog(true) }) {
+                            Icon(Icons.Filled.GroupAdd, contentDescription = "Join Circle")
+                        }
+                        IconButton(onClick = { onShowCreateCircleDialog(true) }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Create Circle")
+                        }
                     }
-                    IconButton(onClick = { onShowCreateCircleDialog(true) }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Create Circle")
-                    }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                )
             )
         }
     ) { paddingValues ->
@@ -140,12 +195,12 @@ fun HomeViewContent(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Text("Your crcles", style = MaterialTheme.typography.titleMedium)
+            Text("Your circles", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(16.dp))
 
-            if (uiState.circles.isEmpty()) {
+            if (uiState.circles.isEmpty() && !uiState.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No crcles yet. Create or join one!")
+                    Text("No circles yet. Create or join one!")
                 }
             } else {
                 LazyVerticalGrid(
@@ -153,7 +208,8 @@ fun HomeViewContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) { items(uiState.circles) { circle ->
+                ) {
+                    items(uiState.circles) { circle ->
                         val now = System.currentTimeMillis()
                         val closeAtMillis = circle.closeAt?.toDate()?.time ?: (now + TimeUnit.DAYS.toMillis(8))
                         val isClosed = circle.status == "closed" || closeAtMillis < now
@@ -173,14 +229,31 @@ fun HomeViewContent(
                                 .aspectRatio(1f)
                         ) {
                             Box(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black),
                                 contentAlignment = Alignment.Center
                             ) {
+                                if (circle.previewUrl != null) {
+                                    AsyncImage(
+                                        model = circle.previewUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .alpha(0.5f),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+
                                 Text(
                                     text = circle.name,
-                                    modifier = Modifier.padding(8.dp),
+                                    modifier = Modifier.padding(12.dp),
                                     textAlign = TextAlign.Center,
-                                    style = TextStyle.Default.copy(fontSize = 24.sp),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 32.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
                                     softWrap = true,
                                     maxLines = 2
                                 )

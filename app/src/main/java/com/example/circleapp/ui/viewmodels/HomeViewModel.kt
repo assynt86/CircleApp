@@ -29,7 +29,8 @@ data class HomeUiState(
     val joinInviteCode: String = "",
     val hasCameraPermission: Boolean = false,
     val isCapturing: Boolean = false,
-    val cameraNavigationState: CameraNavigationState = CameraNavigationState()
+    val cameraNavigationState: CameraNavigationState = CameraNavigationState(),
+    val isLoading: Boolean = true
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -41,6 +42,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     private var initialSelectionDone = false
+    private var initialLoadCompleted = false
 
     init {
         loadUserCircles()
@@ -48,7 +50,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadUserCircles() {
         viewModelScope.launch {
-            // Load saved selections first
             val savedSelection = prefsStore.selectedCircleIdsFlow.first()
             
             repository.getUserCircles(
@@ -56,7 +57,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.update { currentState ->
                         val selection = if (!initialSelectionDone) {
                             initialSelectionDone = true
-                            // Use saved selection if available and circles still exist
                             if (savedSelection.isNotEmpty()) {
                                 val validIds = circleList.map { it.id }.toSet()
                                 savedSelection.filter { it in validIds }
@@ -66,13 +66,62 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         } else {
                             currentState.selectedCircleIds
                         }
+                        
                         currentState.copy(
                             circles = circleList,
                             selectedCircleIds = selection
                         )
                     }
+                    
+                    if (!initialLoadCompleted) {
+                        fetchPreviewPhotos(circleList, onComplete = {
+                            initialLoadCompleted = true
+                            _uiState.update { it.copy(isLoading = false) }
+                        })
+                    } else {
+                        // For subsequent updates, just fetch photos without blocking the UI
+                        fetchPreviewPhotos(circleList, onComplete = {})
+                    }
                 },
-                onError = {  }
+                onError = { 
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            )
+        }
+    }
+
+    private fun fetchPreviewPhotos(circles: List<Circle>, onComplete: () -> Unit) {
+        if (circles.isEmpty()) {
+            onComplete()
+            return
+        }
+        
+        var completedCount = 0
+        circles.forEach { circle ->
+            repository.getFirstPhoto(circle.id, 
+                onSuccess = { photo ->
+                    if (photo != null) {
+                        repository.getDownloadUrl(photo.storagePath) { url ->
+                            if (url != null) {
+                                _uiState.update { state ->
+                                    val updatedCircles = state.circles.map { c ->
+                                        if (c.id == circle.id) c.copy().apply { previewUrl = url } else c
+                                    }
+                                    state.copy(circles = updatedCircles)
+                                }
+                            }
+                            completedCount++
+                            if (completedCount == circles.size) onComplete()
+                        }
+                    } else {
+                        completedCount++
+                        if (completedCount == circles.size) onComplete()
+                    }
+                },
+                onError = { 
+                    completedCount++
+                    if (completedCount == circles.size) onComplete()
+                }
             )
         }
     }
@@ -163,7 +212,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 currentState.selectedCircleIds - circleId
             }
             
-            // Persist the new selection
             viewModelScope.launch {
                 prefsStore.saveSelectedCircleIds(newSelectedIds.toSet())
             }
@@ -178,8 +226,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(selectedCircleIds = listOf(entryPointCircleId))
             }
-            // Optional: should we persist this auto-selection? 
-            // Probably not, usually user wants to return to their "global" selection.
         }
     }
 

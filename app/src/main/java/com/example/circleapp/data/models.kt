@@ -2,6 +2,7 @@ package com.example.circleapp.data
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.Exclude
 
 data class Circle(
     @DocumentId val id: String = "",
@@ -13,7 +14,8 @@ data class Circle(
     val closeAt: Timestamp? = null,
     val deleteAt: Timestamp? = null,
     val cleanedUp: Boolean = false,
-    val status: String = "open"
+    val status: String = "open",
+    @get:Exclude var previewUrl: String? = null
 )
 
 data class Photo(

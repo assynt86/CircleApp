@@ -267,6 +267,32 @@ class CircleRepository {
             }
     }
 
+    fun getFirstPhoto(
+        circleId: String,
+        onSuccess: (PhotoItem?) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles").document(circleId).collection("photos")
+            .orderBy("createdAt")
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snap ->
+                if (snap.isEmpty) {
+                    onSuccess(null)
+                } else {
+                    val doc = snap.documents.first()
+                    onSuccess(PhotoItem(
+                        id = doc.id,
+                        uploaderUid = doc.getString("uploaderUid") ?: "",
+                        storagePath = doc.getString("storagePath") ?: "",
+                        createdAt = doc.getTimestamp("createdAt"),
+                        downloadUrl = null
+                    ))
+                }
+            }
+            .addOnFailureListener { onError(it) }
+    }
+
     fun getDownloadUrl(storagePath: String, onResult: (String?) -> Unit) {
         if (storagePath.isBlank()) {
             onResult(null)
