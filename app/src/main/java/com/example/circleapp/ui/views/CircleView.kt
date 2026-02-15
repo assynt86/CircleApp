@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -229,13 +230,21 @@ fun CircleViewContent(
                         val isSelected = uiState.selectedPhotos.contains(p.id)
                         Card(modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                if (uiState.inSelectionMode) {
+                            .combinedClickable(
+                                onClick = {
+                                    if (uiState.inSelectionMode) {
+                                        onTogglePhotoSelection(p.id)
+                                    } else {
+                                        onSetFullscreenImage(index)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!uiState.inSelectionMode) {
+                                        onToggleSelectionMode()
+                                    }
                                     onTogglePhotoSelection(p.id)
-                                } else {
-                                    onSetFullscreenImage(index)
                                 }
-                            }
+                            )
                             .border(
                                 width = if (isSelected) 4.dp else 0.dp,
                                 color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent

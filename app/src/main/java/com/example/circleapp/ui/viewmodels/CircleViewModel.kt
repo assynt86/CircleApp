@@ -206,7 +206,11 @@ class CircleViewModel(application: Application, private val circleId: String) : 
             } else {
                 selectedPhotos.add(photoId)
             }
-            it.copy(selectedPhotos = selectedPhotos)
+            
+            // If we are in selection mode and the last photo was unselected, exit selection mode.
+            val inSelectionMode = if (it.inSelectionMode && selectedPhotos.isEmpty()) false else it.inSelectionMode
+            
+            it.copy(selectedPhotos = selectedPhotos, inSelectionMode = inSelectionMode)
         }
     }
 
