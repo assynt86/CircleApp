@@ -77,7 +77,7 @@ fun AppNavigation() {
             arguments = listOf(
                 navArgument("startPage") {
                     type = NavType.IntType
-                    defaultValue = 0 // Changed from 1 to start on CameraView
+                    defaultValue = 0 // Startup on CameraView (page 0)
                 },
                 navArgument("circleId") {
                     type = NavType.StringType
@@ -88,16 +88,17 @@ fun AppNavigation() {
 
             val homeViewModel: HomeViewModel = viewModel()
 
+            // startPage is used for the initial page when the entry is first created.
+            // rememberPagerState uses rememberSaveable, so it will survive back navigation
+            // to this same backstack entry without being reset by the initialPage value.
             val startPage = backStackEntry.arguments?.getInt("startPage") ?: 0
             val circleId = backStackEntry.arguments?.getString("circleId")
 
             val pagerState = rememberPagerState(initialPage = startPage) { 3 }
 
-            LaunchedEffect(startPage) {
-                if (pagerState.currentPage != startPage) {
-                    pagerState.animateScrollToPage(startPage)
-                }
-            }
+            // Removed the LaunchedEffect that was forcing the pager to startPage.
+            // This allows the pager to restore its previous page (e.g., HomeView)
+            // when the user navigates back from a CircleView.
 
             HorizontalPager(state = pagerState) { page ->
                 when (page) {
@@ -151,6 +152,7 @@ fun AppNavigation() {
                     circleId = circleId,
                     onBack = { navController.popBackStack() },
                     onCameraClick = { currentCircleId ->
+                        // Navigate to a new main entry starting on the Camera page
                         navController.navigate("main?startPage=0&circleId=$currentCircleId")
                     }
                 )

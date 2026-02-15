@@ -200,9 +200,9 @@ class CircleRepository {
             return
         }
 
+        // Removed .whereEqualTo("status", "open") to allow viewing closed circles
         db.collection("circles")
             .whereArrayContains("members", uid)
-            .whereEqualTo("status", "open")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
                     onError(e)

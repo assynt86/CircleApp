@@ -11,6 +11,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.circleapp.ui.viewmodels.AuthMode
 import com.example.circleapp.ui.viewmodels.AuthViewModel
 
 /**
@@ -23,8 +24,7 @@ fun AuthView(
     authViewModel: AuthViewModel = viewModel(),
     onAuthed: () -> Unit
 ) {
-    var mode by remember { mutableStateOf("login") } // "login" or "signup"
-    val s = authViewModel.state
+    val uiState by authViewModel.uiState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
 
     Column(
@@ -32,19 +32,19 @@ fun AuthView(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = if (mode == "login") "Login" else "Create Account",
+            text = if (uiState.mode == AuthMode.LOGIN) "Login" else "Create Account",
             style = MaterialTheme.typography.headlineSmall
         )
 
         OutlinedTextField(
-            value = s.email,
+            value = uiState.email,
             onValueChange = authViewModel::updateEmail,
             label = { Text("Email") },
             modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
-            value = s.password,
+            value = uiState.password,
             onValueChange = authViewModel::updatePassword,
             label = { Text("Password") },
             modifier = Modifier.fillMaxWidth(),
@@ -62,49 +62,49 @@ fun AuthView(
             }
         )
 
-        if (mode == "signup") {
+        if (uiState.mode == AuthMode.SIGNUP) {
             OutlinedTextField(
-                value = s.displayName,
+                value = uiState.displayName,
                 onValueChange = authViewModel::updateDisplayName,
                 label = { Text("Name") },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
-                value = s.username,
+                value = uiState.username,
                 onValueChange = authViewModel::updateUsername,
                 label = { Text("Username") },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
-                value = s.phone,
+                value = uiState.phone,
                 onValueChange = authViewModel::updatePhone,
                 label = { Text("Phone") },
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
-        if (s.error.isNotBlank()) {
-            Text(s.error, color = MaterialTheme.colorScheme.error)
+        if (uiState.error.isNotBlank()) {
+            Text(uiState.error, color = MaterialTheme.colorScheme.error)
         }
 
         Button(
-            enabled = !s.isLoading,
+            enabled = !uiState.isLoading,
             onClick = {
-                if (mode == "login") authViewModel.login(onAuthed)
+                if (uiState.mode == AuthMode.LOGIN) authViewModel.login(onAuthed)
                 else authViewModel.signUp(onAuthed)
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (mode == "login") "Login" else "Create Account")
+            Text(if (uiState.mode == AuthMode.LOGIN) "Login" else "Create Account")
         }
 
         TextButton(
-            onClick = { mode = if (mode == "login") "signup" else "login" },
+            onClick = { authViewModel.toggleMode() },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (mode == "login") "Need an account? Sign up" else "Have an account? Login")
+            Text(if (uiState.mode == AuthMode.LOGIN) "Need an account? Sign up" else "Have an account? Login")
         }
     }
 }

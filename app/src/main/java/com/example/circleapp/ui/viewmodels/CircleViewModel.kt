@@ -34,7 +34,8 @@ data class CircleUiState(
     val inSelectionMode: Boolean = false,
     val selectedPhotos: Set<String> = emptySet(),
     val currentUserUid: String? = null,
-    val deletingPhotos: Set<String> = emptySet()
+    val deletingPhotos: Set<String> = emptySet(),
+    val showInviteDialog: Boolean = false
 )
 
 class CircleViewModel(application: Application, private val circleId: String) : AndroidViewModel(application) {
@@ -101,26 +102,28 @@ class CircleViewModel(application: Application, private val circleId: String) : 
 
     private fun startRemainingTimeUpdater() {
         viewModelScope.launch {
-            _uiState.value.circleInfo?.closeAt?.toDate()?.time?.let { closeAtMillis ->
-                while (System.currentTimeMillis() < closeAtMillis) {
-                    val remaining = closeAtMillis - System.currentTimeMillis()
-                    if (remaining > 0) {
-                        val formattedTime = DateUtils.formatElapsedTime(remaining / 1000)
-                        _uiState.update { it.copy(remainingTime = formattedTime) }
-                    } else {
-                        _uiState.update { it.copy(remainingTime = "") }
-                        break
-                    }
+            while (true) {
+                val closeAtMillis = _uiState.value.circleInfo?.closeAt?.toDate()?.time
+                if (closeAtMillis == null) {
                     delay(1000)
+                    continue
                 }
-                _uiState.update { it.copy(circleInfo = it.circleInfo?.copy()) } // Refresh state
+
+                val remaining = closeAtMillis - System.currentTimeMillis()
+                if (remaining > 0) {
+                    val formattedTime = DateUtils.formatElapsedTime(remaining / 1000)
+                    _uiState.update { it.copy(remainingTime = formattedTime) }
+                } else {
+                    _uiState.update { it.copy(remainingTime = "", circleInfo = it.circleInfo?.copy()) }
+                    break
+                }
+                delay(1000)
             }
         }
     }
 
     private fun autoSaveNewPhotos(photos: List<PhotoItem>) {
         viewModelScope.launch {
-            // Check if auto-save is enabled
             if (!savedPhotosStore.autoSaveFlow.first()) return@launch
 
             photos.forEach { photo ->
@@ -174,14 +177,6 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         }
     }
 
-    fun uploadPhotoAndKeepCameraOpen(uri: Uri, circleIds: List<String>, onComplete: (Boolean) -> Unit) {
-        _uiState.update { it.copy(isUploading = true) }
-        repository.addPhotoToCircles(uri, circleIds) { isSuccess ->
-            _uiState.update { it.copy(isUploading = false) }
-            onComplete(isSuccess)
-        }
-    }
-
     fun onShowCamera(show: Boolean) {
         _uiState.update { it.copy(showCamera = show) }
     }
@@ -195,7 +190,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
     fun toggleSelectionMode() {
         _uiState.update {
             val inSelectionMode = !it.inSelectionMode
-            if (!inSelectionMode) { // when turning off selection mode
+            if (!inSelectionMode) {
                 it.copy(inSelectionMode = false, selectedPhotos = emptySet())
             } else {
                 it.copy(inSelectionMode = true)
@@ -221,7 +216,6 @@ class CircleViewModel(application: Application, private val circleId: String) : 
             photosToDownload.forEach { photo ->
                 downloadPhotoById(photo.id)
             }
-            // After downloading, exit selection mode
             toggleSelectionMode()
         }
     }
@@ -267,7 +261,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         toggleSelectionMode()
     }
 
-    fun clearSelection() {
-        _uiState.update { it.copy(selectedPhotos = emptySet()) }
+    fun setShowInviteDialog(show: Boolean) {
+        _uiState.update { it.copy(showInviteDialog = show) }
     }
 }

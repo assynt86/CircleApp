@@ -30,7 +30,8 @@ data class HomeUiState(
     val hasCameraPermission: Boolean = false,
     val isCapturing: Boolean = false,
     val cameraNavigationState: CameraNavigationState = CameraNavigationState(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val errorMessage: String? = null
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -58,10 +59,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         val selection = if (!initialSelectionDone) {
                             initialSelectionDone = true
                             if (savedSelection.isNotEmpty()) {
-                                val validIds = circleList.map { it.id }.toSet()
-                                savedSelection.filter { it in validIds }
+                                // Filter saved selection to only include valid and OPEN circles
+                                val openCircleIds = circleList.filter { !it.isClosed }.map { it.id }.toSet()
+                                savedSelection.filter { it in openCircleIds }
                             } else {
-                                circleList.filter { it.status == "open" }.map { it.id }
+                                // Default to all open circles
+                                circleList.filter { !it.isClosed }.map { it.id }
                             }
                         } else {
                             currentState.selectedCircleIds
@@ -84,7 +87,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 },
                 onError = { 
-                    _uiState.update { it.copy(isLoading = false) }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Error loading circles") }
                 }
             )
         }
@@ -138,28 +141,38 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(cameraNavigationState = CameraNavigationState()) }
     }
 
-    fun createCircle(onSuccess: (String) -> Unit, onError: (Exception) -> Unit) {
+    fun createCircle(onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             repository.createCircle(
                 circleName = _uiState.value.newCircleName,
                 durationDays = _uiState.value.newCircleDurationDays.toInt(),
                 onSuccess = onSuccess,
-                onError = onError
+                onError = { e ->
+                    _uiState.update { it.copy(errorMessage = "Error creating circle: ${e.message}") }
+                }
             )
             _uiState.update { it.copy(isCreateCircleDialogVisible = false, newCircleName = "", newCircleDurationDays = 1f) }
         }
     }
 
-    fun joinCircle(onSuccess: (String) -> Unit, onNotFound: () -> Unit, onError: (Exception) -> Unit) {
+    fun joinCircle(onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             repository.joinCircleByInviteCode(
                 inviteCode = _uiState.value.joinInviteCode,
                 onSuccess = onSuccess,
-                onNotFound = onNotFound,
-                onError = onError
+                onNotFound = {
+                    _uiState.update { it.copy(errorMessage = "Circle not found") }
+                },
+                onError = { e ->
+                    _uiState.update { it.copy(errorMessage = "Error joining circle: ${e.message}") }
+                }
             )
             _uiState.update { it.copy(isJoinCircleDialogVisible = false, joinInviteCode = "") }
         }
+    }
+
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     fun setCapturing(isCapturing: Boolean) {
@@ -189,22 +202,32 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             selectedIds.forEach { circleId ->
-                repository.uploadPhotoToCircle(
-                    circleId = circleId,
-                    photoUri = uri,
-                    onSuccess = {
-                        checkCompletion()
-                    },
-                    onError = { e ->
-                        onUploadFailed(circleId, e.message ?: "Unknown error")
-                        checkCompletion()
-                    }
-                )
+                // Final safety check: ensure the circle is still open
+                val circle = _uiState.value.circles.find { it.id == circleId }
+                if (circle != null && !circle.isClosed) {
+                    repository.uploadPhotoToCircle(
+                        circleId = circleId,
+                        photoUri = uri,
+                        onSuccess = {
+                            checkCompletion()
+                        },
+                        onError = { e ->
+                            onUploadFailed(circleId, e.message ?: "Unknown error")
+                            checkCompletion()
+                        }
+                    )
+                } else {
+                    onUploadFailed(circleId, "Circle is closed")
+                    checkCompletion()
+                }
             }
         }
     }
 
     fun onCircleSelected(circleId: String, isSelected: Boolean) {
+        val circle = _uiState.value.circles.find { it.id == circleId }
+        if (isSelected && circle?.isClosed == true) return // Cannot select closed circle
+
         _uiState.update { currentState ->
             val newSelectedIds = if (isSelected) {
                 (currentState.selectedCircleIds + circleId).distinct()
@@ -222,9 +245,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun handleCameraEntry(entryPointCircleId: String?) {
         if (entryPointCircleId != null) {
-            initialSelectionDone = true
-            _uiState.update {
-                it.copy(selectedCircleIds = listOf(entryPointCircleId))
+            val circle = _uiState.value.circles.find { it.id == entryPointCircleId }
+            if (circle != null && !circle.isClosed) {
+                initialSelectionDone = true
+                _uiState.update {
+                    it.copy(selectedCircleIds = listOf(entryPointCircleId))
+                }
             }
         }
     }
