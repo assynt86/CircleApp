@@ -1,9 +1,11 @@
 package com.example.circleapp.ui.views
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
@@ -281,13 +284,16 @@ fun CircleViewContent(
                         generateQRCode(inviteCode)
                     }
                     if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Invite QR Code",
-                            modifier = Modifier
-                                .size(200.dp)
-                                .border(1.dp, Color.Black)
-                        )
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(280.dp)
+                        ) {
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = "Invite ShotCode",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                     Spacer(Modifier.height(16.dp))
                     Text(inviteCode, style = MaterialTheme.typography.headlineLarge, letterSpacing = 5.sp)
