@@ -21,17 +21,11 @@ fun ProfileView(
     onLogout: () -> Unit,
     profileViewModel: ProfileViewModel = viewModel()
 ){
-    val name by profileViewModel.name
-    val username by profileViewModel.username
-    val email by profileViewModel.email
-    val phone by profileViewModel.phone
-    val isAutoSaveEnabled by profileViewModel.isAutoSaveEnabled
+    val uiState by profileViewModel.uiState.collectAsState()
 
-    var showSettingsDialog by remember { mutableStateOf(false) }
-
-    if (showSettingsDialog) {
+    if (uiState.showSettingsDialog) {
         AlertDialog(
-            onDismissRequest = { showSettingsDialog = false },
+            onDismissRequest = { profileViewModel.setShowSettingsDialog(false) },
             title = { Text("Settings") },
             text = {
                 Row(
@@ -41,13 +35,13 @@ fun ProfileView(
                 ) {
                     Text("Auto-save photos to gallery")
                     Switch(
-                        checked = isAutoSaveEnabled,
+                        checked = uiState.isAutoSaveEnabled,
                         onCheckedChange = { profileViewModel.toggleAutoSave(it) }
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showSettingsDialog = false }) {
+                TextButton(onClick = { profileViewModel.setShowSettingsDialog(false) }) {
                     Text("Close")
                 }
             }
@@ -59,7 +53,7 @@ fun ProfileView(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(top = 96.dp, start = 16.dp, end = 16.dp, bottom = 96.dp) // Leave space for button
+                .padding(top = 96.dp, start = 16.dp, end = 16.dp, bottom = 96.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -86,8 +80,8 @@ fun ProfileView(
                 // Account Info
                 Column {
                     OutlinedTextField(
-                        value = name,
-                        onValueChange = { profileViewModel.name.value = it },
+                        value = uiState.name,
+                        onValueChange = { profileViewModel.updateName(it) },
                         label = { Text("Name") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -99,21 +93,21 @@ fun ProfileView(
             EditableProfileRow(
                 icon = Icons.Default.Person,
                 label = "Username",
-                value = username,
+                value = uiState.username,
                 onValueChange = {},
                 readOnly = true
             )
             EditableProfileRow(
                 icon = Icons.Default.Email,
                 label = "Email",
-                value = email,
+                value = uiState.email,
                 onValueChange = {},
                 readOnly = true
             )
             EditableProfileRow(
                 icon = Icons.Default.Phone,
                 label = "Phone",
-                value = phone,
+                value = uiState.phone,
                 onValueChange = {},
                 readOnly = true
             )
@@ -131,7 +125,7 @@ fun ProfileView(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = { showSettingsDialog = true },
+                onClick = { profileViewModel.setShowSettingsDialog(true) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -146,7 +140,7 @@ fun ProfileView(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp, vertical = 24.dp), // Adjust vertical padding to move
+                .padding(horizontal = 16.dp, vertical = 24.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.Red)
         ) {
             Icon(Icons.Default.Logout, contentDescription = "Log Out")

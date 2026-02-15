@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.circleapp.ui.viewmodels.CameraViewModel
 import com.example.circleapp.ui.viewmodels.HomeViewModel
 import kotlinx.coroutines.delay
 import java.io.File
@@ -45,6 +47,7 @@ import java.util.Locale
 @Composable
 fun CameraView(
     homeViewModel: HomeViewModel,
+    cameraViewModel: CameraViewModel = viewModel(),
     entryPointCircleId: String?,
     onCancel: () -> Unit,
     onUploadsComplete: () -> Unit,
@@ -53,60 +56,48 @@ fun CameraView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val haptic = LocalHapticFeedback.current
-    val uiState by homeViewModel.uiState.collectAsState()
+    val homeUiState by homeViewModel.uiState.collectAsState()
+    val cameraUiState by cameraViewModel.uiState.collectAsState()
     
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     
-    var flashMode by remember { mutableIntStateOf(ImageCapture.FLASH_MODE_OFF) }
-    var zoomLevel by remember { mutableFloatStateOf(0f) } 
-    var showZoomBar by remember { mutableStateOf(false) }
-    var showGrid by remember { mutableStateOf(false) }
-    
-    var showCirclesPopup by remember { mutableStateOf(false) }
-    var showFlashUIEffect by remember { mutableStateOf(false) }
-    var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
-
-    var focusPoint by remember { mutableStateOf<Offset?>(null) }
     val focusAlpha by animateFloatAsState(
-        targetValue = if (focusPoint != null) 1f else 0f,
+        targetValue = if (cameraUiState.focusPoint != null) 1f else 0f,
         animationSpec = tween(durationMillis = 200),
         label = "FocusAlpha"
     )
 
-    // Observe zoom state for ratio display and ultrawide support
     val zoomState by (camera?.cameraInfo?.zoomState?.observeAsState()) ?: remember { mutableStateOf<ZoomState?>(null) }
     val minZoomRatio = zoomState?.minZoomRatio ?: 1f
     val maxZoomRatio = zoomState?.maxZoomRatio ?: 1f
     val currentZoomRatio = zoomState?.zoomRatio ?: 1f
 
-    LaunchedEffect(showFlashUIEffect) {
-        if (showFlashUIEffect) {
+    LaunchedEffect(cameraUiState.showFlashUIEffect) {
+        if (cameraUiState.showFlashUIEffect) {
             delay(100)
-            showFlashUIEffect = false
+            cameraViewModel.hideFlashEffect()
         }
     }
 
-    // Auto-hide zoom bar after 1.5 seconds
-    LaunchedEffect(showZoomBar, zoomLevel) {
-        if (showZoomBar) {
+    LaunchedEffect(cameraUiState.showZoomBar, cameraUiState.zoomLevel) {
+        if (cameraUiState.showZoomBar) {
             delay(1500)
-            showZoomBar = false
+            cameraViewModel.hideZoomBar()
         }
     }
 
-    // Auto-hide focus indicator
-    LaunchedEffect(focusPoint) {
-        if (focusPoint != null) {
+    LaunchedEffect(cameraUiState.focusPoint) {
+        if (cameraUiState.focusPoint != null) {
             delay(700)
-            focusPoint = null
+            cameraViewModel.setFocusPoint(null)
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted -> homeViewModel.onCameraPermissionResult(isGranted) }
+        onResult = { isGranted -> cameraViewModel.onPermissionResult(isGranted) }
     )
 
     LaunchedEffect(Unit) {
@@ -114,7 +105,7 @@ fun CameraView(
         homeViewModel.handleCameraEntry(entryPointCircleId)
     }
 
-    if (!uiState.hasCameraPermission) {
+    if (!cameraUiState.hasPermission) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Camera permission is required.", color = Color.White)
@@ -139,7 +130,7 @@ fun CameraView(
                         .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
                     
-                    focusPoint = offset
+                    cameraViewModel.setFocusPoint(offset)
                     camera?.cameraControl?.startFocusAndMetering(action)
                 }
             }
@@ -152,9 +143,9 @@ fun CameraView(
                         if (event.changes.size > 1) {
                             val zoom = event.calculateZoom()
                             if (zoom != 1f) {
-                                zoomLevel = (zoomLevel + (zoom - 1f) * 1.2f).coerceIn(0f, 1f)
-                                camera?.cameraControl?.setLinearZoom(zoomLevel)
-                                showZoomBar = true
+                                val newZoom = (cameraUiState.zoomLevel + (zoom - 1f) * 1.2f).coerceIn(0f, 1f)
+                                cameraViewModel.setZoomLevel(newZoom)
+                                camera?.cameraControl?.setLinearZoom(newZoom)
                                 event.changes.forEach { it.consume() }
                             }
                         }
@@ -162,7 +153,7 @@ fun CameraView(
                 }
             }
     ) {
-        key(lensFacing) {
+        key(cameraUiState.lensFacing) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -176,7 +167,7 @@ fun CameraView(
                         }
                         val capture = ImageCapture.Builder()
                             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                            .setFlashMode(flashMode)
+                            .setFlashMode(cameraUiState.flashMode)
                             .build()
                         imageCapture = capture
 
@@ -184,7 +175,7 @@ fun CameraView(
                             cameraProvider.unbindAll()
                             camera = cameraProvider.bindToLifecycle(
                                 lifecycleOwner,
-                                CameraSelector.Builder().requireLensFacing(lensFacing).build(),
+                                CameraSelector.Builder().requireLensFacing(cameraUiState.lensFacing).build(),
                                 preview,
                                 capture
                             )
@@ -197,8 +188,7 @@ fun CameraView(
             )
         }
 
-        // Focus Indicator
-        focusPoint?.let { point ->
+        cameraUiState.focusPoint?.let { point ->
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
                     color = Color.White.copy(alpha = focusAlpha),
@@ -214,49 +204,22 @@ fun CameraView(
             }
         }
 
-        // 3x3 Grid Overlay
-        if (showGrid) {
+        if (cameraUiState.showGrid) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val width = size.width
                 val height = size.height
-                
-                // Vertical lines
-                drawLine(
-                    color = Color.White.copy(alpha = 0.5f),
-                    start = Offset(width / 3, 0f),
-                    end = Offset(width / 3, height),
-                    strokeWidth = 1.dp.toPx()
-                )
-                drawLine(
-                    color = Color.White.copy(alpha = 0.5f),
-                    start = Offset(2 * width / 3, 0f),
-                    end = Offset(2 * width / 3, height),
-                    strokeWidth = 1.dp.toPx()
-                )
-                
-                // Horizontal lines
-                drawLine(
-                    color = Color.White.copy(alpha = 0.5f),
-                    start = Offset(0f, height / 3),
-                    end = Offset(width, height / 3),
-                    strokeWidth = 1.dp.toPx()
-                )
-                drawLine(
-                    color = Color.White.copy(alpha = 0.5f),
-                    start = Offset(0f, 2 * height / 3),
-                    end = Offset(width, 2 * height / 3),
-                    strokeWidth = 1.dp.toPx()
-                )
+                drawLine(color = Color.White.copy(alpha = 0.5f), start = Offset(width / 3, 0f), end = Offset(width / 3, height), strokeWidth = 1.dp.toPx())
+                drawLine(color = Color.White.copy(alpha = 0.5f), start = Offset(2 * width / 3, 0f), end = Offset(2 * width / 3, height), strokeWidth = 1.dp.toPx())
+                drawLine(color = Color.White.copy(alpha = 0.5f), start = Offset(0f, height / 3), end = Offset(width, height / 3), strokeWidth = 1.dp.toPx())
+                drawLine(color = Color.White.copy(alpha = 0.5f), start = Offset(0f, 2 * height / 3), end = Offset(width, 2 * height / 3), strokeWidth = 1.dp.toPx())
             }
         }
 
-        // Capture flash effect
-        if (showFlashUIEffect) {
+        if (cameraUiState.showFlashUIEffect) {
             Box(Modifier.fillMaxSize().border(4.dp, Color.White))
         }
 
-        // Subtle Left Side Zoom Bar
-        if (showZoomBar) {
+        if (cameraUiState.showZoomBar) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
@@ -269,13 +232,12 @@ fun CameraView(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(zoomLevel.coerceIn(0.01f, 1f))
+                        .fillMaxHeight(cameraUiState.zoomLevel.coerceIn(0.01f, 1f))
                         .background(Color.White, RoundedCornerShape(1.dp))
                 )
             }
         }
 
-        // Left area swipe detector for zoom
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
@@ -287,35 +249,33 @@ fun CameraView(
                         change.consume()
                         val sensitivity = 0.003f
                         val delta = -dragAmount * sensitivity
-                        zoomLevel = (zoomLevel + delta).coerceIn(0f, 1f)
-                        camera?.cameraControl?.setLinearZoom(zoomLevel)
-                        showZoomBar = true
+                        val newZoom = (cameraUiState.zoomLevel + delta).coerceIn(0f, 1f)
+                        cameraViewModel.setZoomLevel(newZoom)
+                        camera?.cameraControl?.setLinearZoom(newZoom)
                     }
                 }
         )
 
-        // Top Controls Bar (Redesigned for better centering)
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .padding(top = 48.dp, start = 8.dp, end = 8.dp)
         ) {
-            // Left Controls
             Row(
                 modifier = Modifier.align(Alignment.CenterStart),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = {
-                    val nextMode = when (flashMode) {
+                    val nextMode = when (cameraUiState.flashMode) {
                         ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_ON
                         ImageCapture.FLASH_MODE_ON -> ImageCapture.FLASH_MODE_AUTO
                         else -> ImageCapture.FLASH_MODE_OFF
                     }
-                    flashMode = nextMode
+                    cameraViewModel.setFlashMode(nextMode)
                     imageCapture?.flashMode = nextMode
                 }) {
-                    val icon = when (flashMode) {
+                    val icon = when (cameraUiState.flashMode) {
                         ImageCapture.FLASH_MODE_ON -> Icons.Filled.FlashOn
                         ImageCapture.FLASH_MODE_AUTO -> Icons.Filled.FlashAuto
                         else -> Icons.Filled.FlashOff
@@ -323,32 +283,27 @@ fun CameraView(
                     Icon(icon, contentDescription = "Flash Mode", tint = Color.White)
                 }
 
-                IconButton(onClick = { showGrid = !showGrid }) {
+                IconButton(onClick = { cameraViewModel.toggleGrid() }) {
                     Icon(
-                        if (showGrid) Icons.Filled.GridOn else Icons.Filled.GridOff,
+                        if (cameraUiState.showGrid) Icons.Filled.GridOn else Icons.Filled.GridOff,
                         contentDescription = "Toggle Grid",
                         tint = Color.White
                     )
                 }
             }
 
-            // Center: Zoom Toggle and Indicator
-            // Show if device has ultrawide support OR if currently zoomed in
             if (minZoomRatio < 0.95f || currentZoomRatio > 1.05f) {
                 TextButton(
                     modifier = Modifier.align(Alignment.Center),
                     onClick = {
                         if (currentZoomRatio > 0.95f) {
-                            // If at 1x or higher, jump to ultrawide (if supported) or 1x
                             val target = if (minZoomRatio < 0.95f) minZoomRatio else 1.0f
                             camera?.cameraControl?.setZoomRatio(target)
-                            zoomLevel = if (target == 1.0f && maxZoomRatio > minZoomRatio) (1.0f - minZoomRatio) / (maxZoomRatio - minZoomRatio) else 0f
+                            cameraViewModel.setZoomLevel(if (target == 1.0f && maxZoomRatio > minZoomRatio) (1.0f - minZoomRatio) / (maxZoomRatio - minZoomRatio) else 0f)
                         } else {
-                            // If in ultrawide, jump to 1x
                             camera?.cameraControl?.setZoomRatio(1.0f)
-                            zoomLevel = if (maxZoomRatio > minZoomRatio) (1.0f - minZoomRatio) / (maxZoomRatio - minZoomRatio) else 0f
+                            cameraViewModel.setZoomLevel(if (maxZoomRatio > minZoomRatio) (1.0f - minZoomRatio) / (maxZoomRatio - minZoomRatio) else 0f)
                         }
-                        showZoomBar = true
                     }
                 ) {
                     Box(
@@ -365,16 +320,14 @@ fun CameraView(
                 }
             }
 
-            // Right: Circle Selector
             IconButton(
                 modifier = Modifier.align(Alignment.CenterEnd),
-                onClick = { showCirclesPopup = true }
+                onClick = { cameraViewModel.setShowCirclesPopup(true) }
             ) {
                 Icon(Icons.Filled.Groups, contentDescription = "Select Circles", tint = Color.White)
             }
         }
 
-        // Bottom Capture Button Area
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -388,11 +341,10 @@ fun CameraView(
                     .border(5.dp, Color.White, CircleShape),
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showFlashUIEffect = true
+                    cameraViewModel.triggerFlashEffect()
                     val capture = imageCapture ?: return@IconButton
 
-                    // Lock the UI immediately
-                    homeViewModel.setCapturing(true)
+                    cameraViewModel.setCapturing(true)
 
                     val photoFile = File(
                         context.cacheDir,
@@ -406,9 +358,7 @@ fun CameraView(
                         ContextCompat.getMainExecutor(context),
                         object : ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                // Unlock UI as soon as image is saved to disk
-                                homeViewModel.setCapturing(false)
-                                
+                                cameraViewModel.setCapturing(false)
                                 val savedUri = Uri.fromFile(photoFile)
                                 homeViewModel.uploadPhotoToCircles(
                                     uri = savedUri,
@@ -418,13 +368,13 @@ fun CameraView(
                             }
 
                             override fun onError(exc: ImageCaptureException) {
-                                homeViewModel.setCapturing(false)
+                                cameraViewModel.setCapturing(false)
                                 onUploadFailed("Capture", exc.message ?: "Unknown error")
                             }
                         }
                     )
                 },
-                enabled = !uiState.isCapturing && uiState.selectedCircleIds.isNotEmpty()
+                enabled = !cameraUiState.isCapturing && homeUiState.selectedCircleIds.isNotEmpty()
             ) {
                 Icon(
                     imageVector = Icons.Filled.Camera,
@@ -434,22 +384,13 @@ fun CameraView(
                 )
             }
 
-            // Flip Camera Button
             IconButton(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 48.dp)
                     .size(48.dp)
                     .background(Color.Black.copy(alpha = 0.4f), CircleShape),
-                onClick = {
-                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                        CameraSelector.LENS_FACING_FRONT
-                    } else {
-                        CameraSelector.LENS_FACING_BACK
-                    }
-                    zoomLevel = 0f
-                    focusPoint = null
-                }
+                onClick = { cameraViewModel.toggleLensFacing() }
             ) {
                 Icon(
                     imageVector = Icons.Filled.FlipCameraAndroid,
@@ -459,26 +400,26 @@ fun CameraView(
             }
         }
 
-        // Circle selection popup
-        if (showCirclesPopup) {
+        if (cameraUiState.showCirclesPopup) {
             AlertDialog(
-                onDismissRequest = { showCirclesPopup = false },
+                onDismissRequest = { cameraViewModel.setShowCirclesPopup(false) },
                 title = { Text("Select Circles") },
                 text = {
                     LazyColumn {
-                        items(uiState.circles) { circle ->
+                        // Only show open circles for photo capture
+                        items(homeUiState.circles.filter { !it.isClosed }) { circle ->
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        val isChecked = !uiState.selectedCircleIds.contains(circle.id)
+                                        val isChecked = !homeUiState.selectedCircleIds.contains(circle.id)
                                         homeViewModel.onCircleSelected(circle.id, isChecked)
                                     }
                                     .padding(vertical = 8.dp)
                             ) {
                                 Checkbox(
-                                    checked = uiState.selectedCircleIds.contains(circle.id),
+                                    checked = homeUiState.selectedCircleIds.contains(circle.id),
                                     onCheckedChange = { isChecked ->
                                         homeViewModel.onCircleSelected(circle.id, isChecked)
                                     }
@@ -490,7 +431,7 @@ fun CameraView(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showCirclesPopup = false }) {
+                    TextButton(onClick = { cameraViewModel.setShowCirclesPopup(false) }) {
                         Text("Done")
                     }
                 }

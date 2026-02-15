@@ -1,12 +1,9 @@
 package com.example.circleapp.ui.viewmodels
 
 import android.app.Application
-import android.content.ContentValues
-import android.net.Uri
-import android.provider.MediaStore
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,7 +11,15 @@ import kotlinx.coroutines.flow.update
 
 data class CameraUiState(
     val hasPermission: Boolean = false,
-    val isCapturing: Boolean = false
+    val isCapturing: Boolean = false,
+    val flashMode: Int = ImageCapture.FLASH_MODE_OFF,
+    val zoomLevel: Float = 0f,
+    val showZoomBar: Boolean = false,
+    val showGrid: Boolean = false,
+    val lensFacing: Int = CameraSelector.LENS_FACING_BACK,
+    val focusPoint: Offset? = null,
+    val showFlashUIEffect: Boolean = false,
+    val showCirclesPopup: Boolean = false
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -25,45 +30,50 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(hasPermission = isGranted) }
     }
 
-    fun takePicture(
-        imageCapture: ImageCapture?,
-        onPhotoSaved: (Uri) -> Unit
-    ) {
-        if (_uiState.value.isCapturing) return
-        val capture = imageCapture ?: return
+    fun setFlashMode(mode: Int) {
+        _uiState.update { it.copy(flashMode = mode) }
+    }
 
-        _uiState.update { it.copy(isCapturing = true) }
+    fun setZoomLevel(level: Float) {
+        _uiState.update { it.copy(zoomLevel = level.coerceIn(0f, 1f), showZoomBar = true) }
+    }
 
-        val context = getApplication<Application>().applicationContext
-        val name = "Circle_${System.currentTimeMillis()}"
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.jpg")
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Circle")
+    fun hideZoomBar() {
+        _uiState.update { it.copy(showZoomBar = false) }
+    }
+
+    fun toggleGrid() {
+        _uiState.update { it.copy(showGrid = !it.showGrid) }
+    }
+
+    fun toggleLensFacing() {
+        _uiState.update {
+            it.copy(
+                lensFacing = if (it.lensFacing == CameraSelector.LENS_FACING_BACK)
+                    CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK,
+                zoomLevel = 0f,
+                focusPoint = null
+            )
         }
+    }
 
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(
-            context.contentResolver,
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            contentValues
-        ).build()
+    fun setFocusPoint(point: Offset?) {
+        _uiState.update { it.copy(focusPoint = point) }
+    }
 
-        capture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(context),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    output.savedUri?.let { uri ->
-                        onPhotoSaved(uri)
-                    }
-                    _uiState.update { it.copy(isCapturing = false) }
-                }
+    fun setCapturing(isCapturing: Boolean) {
+        _uiState.update { it.copy(isCapturing = isCapturing) }
+    }
 
-                override fun onError(exception: ImageCaptureException) {
-                    exception.printStackTrace()
-                    _uiState.update { it.copy(isCapturing = false) }
-                }
-            }
-        )
+    fun triggerFlashEffect() {
+        _uiState.update { it.copy(showFlashUIEffect = true) }
+    }
+
+    fun hideFlashEffect() {
+        _uiState.update { it.copy(showFlashUIEffect = false) }
+    }
+
+    fun setShowCirclesPopup(show: Boolean) {
+        _uiState.update { it.copy(showCirclesPopup = show) }
     }
 }

@@ -49,9 +49,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,7 +74,7 @@ fun CircleView(
     onCameraClick: (String) -> Unit
 ) {
     val application = LocalContext.current.applicationContext as Application
-    val factory = CircleViewModelFactory(application, circleId)
+    val factory = remember(circleId) { CircleViewModelFactory(application, circleId) }
     val viewModel: CircleViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
 
@@ -104,7 +102,8 @@ fun CircleView(
         onDownloadSelectedPhotos = { viewModel.downloadSelectedPhotos() },
         onSavePhoto = { viewModel.savePhoto(it) },
         onDeletePhoto = { viewModel.deletePhoto(it) },
-        onDeleteSelectedPhotos = { viewModel.deleteSelectedPhotos() }
+        onDeleteSelectedPhotos = { viewModel.deleteSelectedPhotos() },
+        onShowInviteDialog = { viewModel.setShowInviteDialog(it) }
     )
 }
 
@@ -121,9 +120,10 @@ fun CircleViewContent(
     onDownloadSelectedPhotos: () -> Unit,
     onSavePhoto: (String) -> Unit,
     onDeletePhoto: (String) -> Unit,
-    onDeleteSelectedPhotos: () -> Unit
+    onDeleteSelectedPhotos: () -> Unit,
+    onShowInviteDialog: (Boolean) -> Unit
 ) {
-    var showInviteDialog by remember { mutableStateOf(false) }
+    val isClosed = uiState.circleInfo?.isClosed == true
 
     Scaffold(
         topBar = {
@@ -132,7 +132,7 @@ fun CircleViewContent(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     if (uiState.inSelectionMode) {
-                        val canDeleteAll = uiState.selectedPhotos.isNotEmpty() && uiState.selectedPhotos.all { id ->
+                        val canDeleteAll = !isClosed && uiState.selectedPhotos.isNotEmpty() && uiState.selectedPhotos.all { id ->
                             val p = uiState.photos.find { it.id == id }
                             p != null && (p.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid)
                         }
@@ -150,13 +150,13 @@ fun CircleViewContent(
                             Icon(Icons.Filled.Cancel, contentDescription = "Cancel Selection")
                         }
                     } else {
-                        IconButton(onClick = { showInviteDialog = true }) {
+                        IconButton(onClick = { onShowInviteDialog(true) }) {
                             Icon(Icons.Filled.GroupAdd, contentDescription = "Invite People")
                         }
                         IconButton(onClick = onToggleSelectionMode) {
                             Icon(Icons.Filled.SelectAll, contentDescription = "Select Photos")
                         }
-                        if (uiState.circleInfo?.status == "open") {
+                        if (!isClosed) {
                             IconButton(onClick = onUploadPhoto) {
                                 Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
                             }
@@ -173,7 +173,7 @@ fun CircleViewContent(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
             if (uiState.error != null) {
                 Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
@@ -189,17 +189,24 @@ fun CircleViewContent(
             }
 
             val info = uiState.circleInfo
-            Text("Invite code: ${info.inviteCode}", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (isClosed) Color.Gray else Color(0xFF4CAF50)
+                )
 
-            val isClosed = info.status == "closed"
-            Text(
-                text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            if (!isClosed) {
-                Text("Closes in: ${uiState.remainingTime}")
+                if (!isClosed) {
+                    Text(
+                        text = "Closes in: ${uiState.remainingTime}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -263,9 +270,9 @@ fun CircleViewContent(
         }
     }
 
-    if (showInviteDialog && uiState.circleInfo != null) {
+    if (uiState.showInviteDialog && uiState.circleInfo != null) {
         AlertDialog(
-            onDismissRequest = { showInviteDialog = false },
+            onDismissRequest = { onShowInviteDialog(false) },
             title = { Text("Invite to ${uiState.circleInfo?.name}") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -287,7 +294,7 @@ fun CircleViewContent(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showInviteDialog = false }) {
+                TextButton(onClick = { onShowInviteDialog(false) }) {
                     Text("Close")
                 }
             }
@@ -312,7 +319,6 @@ fun CircleViewContent(
                         indication = null
                     ) { onSetFullscreenImage(null) }
             ) {
-                // Keep the pager moved up
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier
@@ -332,7 +338,7 @@ fun CircleViewContent(
                 val currentPhoto = uiState.photos.getOrNull(pagerState.currentPage)
                 if (currentPhoto != null) {
                     val isSaving = uiState.inProgressSaves.contains(currentPhoto.id)
-                    val canDelete = currentPhoto.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid
+                    val canDelete = !isClosed && (currentPhoto.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid)
                     val isDeleting = uiState.deletingPhotos.contains(currentPhoto.id)
 
                     Row(

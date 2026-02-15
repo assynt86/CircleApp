@@ -3,6 +3,7 @@ package com.example.circleapp.data
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.Exclude
+import java.util.concurrent.TimeUnit
 
 data class Circle(
     @DocumentId val id: String = "",
@@ -16,7 +17,24 @@ data class Circle(
     val cleanedUp: Boolean = false,
     val status: String = "open",
     @get:Exclude var previewUrl: String? = null
-)
+) {
+    @get:Exclude
+    val isClosed: Boolean
+        get() {
+            val now = System.currentTimeMillis()
+            val closeAtMillis = closeAt?.toDate()?.time ?: (now + TimeUnit.DAYS.toMillis(8))
+            return status == "closed" || closeAtMillis < now
+        }
+
+    @get:Exclude
+    val isExpiringSoon: Boolean
+        get() {
+            if (isClosed) return false
+            val now = System.currentTimeMillis()
+            val closeAtMillis = closeAt?.toDate()?.time ?: return false
+            return (closeAtMillis - now) < TimeUnit.DAYS.toMillis(1)
+        }
+}
 
 data class Photo(
     @DocumentId val id: String = "",
@@ -31,7 +49,22 @@ data class CircleInfo(
     val status: String,
     val closeAt: Timestamp?,
     val ownerUid: String
-)
+) {
+    val isClosed: Boolean
+        get() {
+            val now = System.currentTimeMillis()
+            val closeAtMillis = closeAt?.toDate()?.time ?: (now + TimeUnit.DAYS.toMillis(8))
+            return status == "closed" || closeAtMillis < now
+        }
+
+    val isExpiringSoon: Boolean
+        get() {
+            if (isClosed) return false
+            val now = System.currentTimeMillis()
+            val closeAtMillis = closeAt?.toDate()?.time ?: return false
+            return (closeAtMillis - now) < TimeUnit.DAYS.toMillis(1)
+        }
+}
 
 data class PhotoItem(
     val id: String,

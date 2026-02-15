@@ -50,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,7 +75,6 @@ import coil.compose.AsyncImage
 import com.example.circleapp.R
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
-import java.util.concurrent.TimeUnit
 
 @Composable
 fun HomeView(
@@ -86,23 +86,20 @@ fun HomeView(
     val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    // Observe error message and show toast
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            homeViewModel.clearErrorMessage()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         HomeViewContent(
             uiState = uiState,
             onCircleClick = onCircleClick,
-            onJoinCircle = {
-                homeViewModel.joinCircle(
-                    onSuccess = onJoinCircle,
-                    onNotFound = { Toast.makeText(context, "Circle not found", Toast.LENGTH_SHORT).show() },
-                    onError = { Toast.makeText(context, "Error joining circle", Toast.LENGTH_SHORT).show() }
-                )
-            },
-            onCreateCircle = {
-                homeViewModel.createCircle(
-                    onSuccess = onCreateCircle,
-                    onError = { Toast.makeText(context, "Error creating circle", Toast.LENGTH_SHORT).show() }
-                )
-            },
+            onJoinCircle = { homeViewModel.joinCircle(onSuccess = onJoinCircle) },
+            onCreateCircle = { homeViewModel.createCircle(onSuccess = onCreateCircle) },
             onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
             onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
             onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
@@ -210,14 +207,9 @@ fun HomeViewContent(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(uiState.circles) { circle ->
-                        val now = System.currentTimeMillis()
-                        val closeAtMillis = circle.closeAt?.toDate()?.time ?: (now + TimeUnit.DAYS.toMillis(8))
-                        val isClosed = circle.status == "closed" || closeAtMillis < now
-                        val isExpiringSoon = !isClosed && (closeAtMillis - now) < TimeUnit.DAYS.toMillis(1)
-
                         val borderColor = when {
-                            isExpiringSoon -> Color.Red.copy(alpha = 0.5f)
-                            !isClosed -> Color.Green.copy(alpha = 0.5f)
+                            circle.isExpiringSoon -> Color(0xFFF44336) // Red
+                            !circle.isClosed -> Color(0xFF4CAF50) // Green
                             else -> Color.Transparent
                         }
 

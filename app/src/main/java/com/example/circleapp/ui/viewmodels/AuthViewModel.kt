@@ -1,14 +1,14 @@
 package com.example.circleapp.ui.viewmodels
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.circleapp.data.AuthRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * AuthUiState:
- * Stores input fields + loading + error message.
+ * Stores input fields + loading + error message + current mode.
  */
 data class AuthUiState(
     val email: String = "",
@@ -17,8 +17,13 @@ data class AuthUiState(
     val phone: String = "",
     val displayName: String = "",
     val isLoading: Boolean = false,
-    val error: String = ""
+    val error: String = "",
+    val mode: AuthMode = AuthMode.LOGIN
 )
+
+enum class AuthMode {
+    LOGIN, SIGNUP
+}
 
 /**
  * AuthViewModel:
@@ -28,46 +33,52 @@ class AuthViewModel(
     private val repo: AuthRepository = AuthRepository()
 ) : ViewModel() {
 
-    var state by mutableStateOf(AuthUiState())
-        private set
+    private val _uiState = MutableStateFlow(AuthUiState())
+    val uiState = _uiState.asStateFlow()
 
     fun isSignedIn(): Boolean = repo.isSignedIn()
 
-    fun updateEmail(v: String) { state = state.copy(email = v, error = "") }
-    fun updatePassword(v: String) { state = state.copy(password = v, error = "") }
-    fun updateUsername(v: String) { state = state.copy(username = v, error = "") }
-    fun updatePhone(v: String) { state = state.copy(phone = v, error = "") }
-    fun updateDisplayName(v: String) { state = state.copy(displayName = v, error = "") }
+    fun updateEmail(v: String) { _uiState.update { it.copy(email = v, error = "") } }
+    fun updatePassword(v: String) { _uiState.update { it.copy(password = v, error = "") } }
+    fun updateUsername(v: String) { _uiState.update { it.copy(username = v, error = "") } }
+    fun updatePhone(v: String) { _uiState.update { it.copy(phone = v, error = "") } }
+    fun updateDisplayName(v: String) { _uiState.update { it.copy(displayName = v, error = "") } }
+
+    fun toggleMode() {
+        _uiState.update {
+            it.copy(mode = if (it.mode == AuthMode.LOGIN) AuthMode.SIGNUP else AuthMode.LOGIN, error = "")
+        }
+    }
 
     fun login(onSuccess: () -> Unit) {
-        state = state.copy(isLoading = true, error = "")
+        _uiState.update { it.copy(isLoading = true, error = "") }
         repo.loginWithEmail(
-            email = state.email,
-            password = state.password,
+            email = _uiState.value.email,
+            password = _uiState.value.password,
             onSuccess = {
-                state = state.copy(isLoading = false)
+                _uiState.update { it.copy(isLoading = false) }
                 onSuccess()
             },
             onError = { e ->
-                state = state.copy(isLoading = false, error = e.message ?: "Login failed")
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Login failed") }
             }
         )
     }
 
     fun signUp(onSuccess: () -> Unit) {
-        state = state.copy(isLoading = true, error = "")
+        _uiState.update { it.copy(isLoading = true, error = "") }
         repo.signUpWithEmail(
-            email = state.email,
-            password = state.password,
-            username = state.username,
-            phone = state.phone,
-            displayName = state.displayName,
+            email = _uiState.value.email,
+            password = _uiState.value.password,
+            username = _uiState.value.username,
+            phone = _uiState.value.phone,
+            displayName = _uiState.value.displayName,
             onSuccess = {
-                state = state.copy(isLoading = false)
+                _uiState.update { it.copy(isLoading = false) }
                 onSuccess()
             },
             onError = { e ->
-                state = state.copy(isLoading = false, error = e.message ?: "Sign-up failed")
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Sign-up failed") }
             }
         )
     }
