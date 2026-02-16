@@ -156,12 +156,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun joinCircle(onSuccess: (String) -> Unit) {
+        val currentInviteCode = _uiState.value.joinInviteCode
         viewModelScope.launch {
             repository.joinCircleByInviteCode(
-                inviteCode = _uiState.value.joinInviteCode,
+                inviteCode = currentInviteCode,
                 onSuccess = onSuccess,
                 onNotFound = {
-                    _uiState.update { it.copy(errorMessage = "Circle not found") }
+                    _uiState.update { it.copy(errorMessage = "Circle not found: $currentInviteCode") }
                 },
                 onError = { e ->
                     _uiState.update { it.copy(errorMessage = "Error joining circle: ${e.message}") }
