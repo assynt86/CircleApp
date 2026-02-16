@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -129,9 +130,10 @@ fun HomeView(
                         painter = painterResource(id = R.drawable.app_logo),
                         contentDescription = null,
                         modifier = Modifier
-                            .height(100.dp)
-                            .width(200.dp),
-                        contentScale = ContentScale.Fit
+                            .height(300.dp)
+                            .width(600.dp),
+                        contentScale = ContentScale.Fit,
+                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
                     )
                     Spacer(Modifier.height(32.dp))
                     CircularProgressIndicator(
@@ -160,16 +162,17 @@ fun HomeViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                modifier = Modifier.height(120.dp),
+                modifier = Modifier.height(180.dp),
                 title = { 
                     Image(
                         painter = painterResource(id = R.drawable.app_logo),
                         contentDescription = stringResource(R.string.app_name),
                         modifier = Modifier
-                            .height(100.dp)
-                            .width(200.dp),
+                            .height(150.dp)
+                            .width(300.dp),
                         contentScale = ContentScale.Fit,
-                        alignment = Alignment.CenterStart
+                        alignment = Alignment.CenterStart,
+                        colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
                     )
                 },
                 actions = {
@@ -258,7 +261,7 @@ fun HomeViewContent(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color.Black),
+                                        .background(MaterialTheme.colorScheme.surface),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (circle.previewUrl != null) {
@@ -276,7 +279,7 @@ fun HomeViewContent(
                                         text = circle.name,
                                         modifier = Modifier.padding(12.dp),
                                         textAlign = TextAlign.Center,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         style = MaterialTheme.typography.titleLarge.copy(
                                             fontSize = 32.sp,
                                             fontWeight = FontWeight.ExtraBold
@@ -372,9 +375,10 @@ fun HomeViewContent(
                                 }
                             )
                             // Add circular trace overlay
+                            val traceColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 drawCircle(
-                                    color = Color.White.copy(alpha = 0.4f),
+                                    color = traceColor,
                                     radius = size.minDimension / 2.5f,
                                     style = Stroke(
                                         width = 2.dp.toPx(),
@@ -402,9 +406,9 @@ fun HomeViewContent(
                     BasicTextField(
                         value = uiState.joinInviteCode,
                         onValueChange = onInviteCodeChange,
-                        decorationBox = @Composable { _ ->
+                        decorationBox = { _ ->
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                repeat(6) { index ->
+                                for (index in 0 until 6) {
                                     val char = uiState.joinInviteCode.getOrNull(index)
                                     Box(
                                         modifier = Modifier

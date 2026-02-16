@@ -10,7 +10,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -21,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.circleapp.ui.theme.CircleAppTheme
 import com.example.circleapp.ui.viewmodels.HomeViewModel
+import com.example.circleapp.ui.viewmodels.MainViewModel
 import com.example.circleapp.ui.views.CameraView
 import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
@@ -30,13 +32,18 @@ import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.views.AuthView
 import com.example.circleapp.ui.viewmodels.AuthViewModel
 
-
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            CircleAppTheme {
+            val mainViewModel: MainViewModel = viewModel()
+            val useSystemTheme by mainViewModel.useSystemTheme.collectAsState(initial = true)
+            val isDarkMode by mainViewModel.isDarkMode.collectAsState(initial = true)
+
+            CircleAppTheme(
+                useSystemTheme = useSystemTheme,
+                isDarkMode = isDarkMode
+            ) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AppNavigation()
                 }
@@ -88,17 +95,10 @@ fun AppNavigation() {
 
             val homeViewModel: HomeViewModel = viewModel()
 
-            // startPage is used for the initial page when the entry is first created.
-            // rememberPagerState uses rememberSaveable, so it will survive back navigation
-            // to this same backstack entry without being reset by the initialPage value.
             val startPage = backStackEntry.arguments?.getInt("startPage") ?: 0
             val circleId = backStackEntry.arguments?.getString("circleId")
 
             val pagerState = rememberPagerState(initialPage = startPage) { 3 }
-
-            // Removed the LaunchedEffect that was forcing the pager to startPage.
-            // This allows the pager to restore its previous page (e.g., HomeView)
-            // when the user navigates back from a CircleView.
 
             HorizontalPager(state = pagerState) { page ->
                 when (page) {

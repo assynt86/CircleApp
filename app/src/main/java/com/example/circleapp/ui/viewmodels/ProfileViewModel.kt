@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.circleapp.data.SavedPhotosStore
+import com.example.circleapp.data.ThemePreferences
 import com.example.circleapp.data.UserRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
@@ -22,6 +23,8 @@ data class ProfileUiState(
     val phone: String = "",
     val photoUrl: String = "",
     val isAutoSaveEnabled: Boolean = false,
+    val useSystemTheme: Boolean = true,
+    val isDarkMode: Boolean = true,
     val showSettingsDialog: Boolean = false,
     val showEditNameDialog: Boolean = false,
     val isLoading: Boolean = false,
@@ -34,6 +37,7 @@ data class ProfileUiState(
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = UserRepository()
     private val savedPhotosStore = SavedPhotosStore(application)
+    private val themePreferences = ThemePreferences(application)
     private val auth = FirebaseAuth.getInstance()
     private val storage = FirebaseStorage.getInstance()
 
@@ -45,6 +49,16 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             savedPhotosStore.autoSaveFlow.collectLatest { enabled ->
                 _uiState.update { it.copy(isAutoSaveEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            themePreferences.useSystemThemeFlow.collectLatest { useSystem ->
+                _uiState.update { it.copy(useSystemTheme = useSystem) }
+            }
+        }
+        viewModelScope.launch {
+            themePreferences.isDarkModeFlow.collectLatest { isDark ->
+                _uiState.update { it.copy(isDarkMode = isDark) }
             }
         }
     }
@@ -75,6 +89,18 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     fun toggleAutoSave(enabled: Boolean) {
         viewModelScope.launch {
             savedPhotosStore.setAutoSave(enabled)
+        }
+    }
+
+    fun setUseSystemTheme(useSystem: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setUseSystemTheme(useSystem)
+        }
+    }
+
+    fun setDarkMode(isDark: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setDarkMode(isDark)
         }
     }
 

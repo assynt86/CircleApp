@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -79,16 +80,47 @@ fun ProfileView(
             onDismissRequest = { profileViewModel.setShowSettingsDialog(false) },
             title = { Text("Settings", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
             text = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Auto-save photos to gallery", fontFamily = LeagueSpartan)
-                    Switch(
-                        checked = uiState.isAutoSaveEnabled,
-                        onCheckedChange = { profileViewModel.toggleAutoSave(it) }
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Auto-save photos to gallery", fontFamily = LeagueSpartan)
+                        Switch(
+                            checked = uiState.isAutoSaveEnabled,
+                            onCheckedChange = { profileViewModel.toggleAutoSave(it) }
+                        )
+                    }
+                    
+                    HorizontalDivider()
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Use System Theme", fontFamily = LeagueSpartan)
+                        Switch(
+                            checked = uiState.useSystemTheme,
+                            onCheckedChange = { profileViewModel.setUseSystemTheme(it) }
+                        )
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (uiState.useSystemTheme) 0.5f else 1.0f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Dark Mode", fontFamily = LeagueSpartan)
+                        Switch(
+                            checked = uiState.isDarkMode,
+                            onCheckedChange = { if (!uiState.useSystemTheme) profileViewModel.setDarkMode(it) },
+                            enabled = !uiState.useSystemTheme
+                        )
+                    }
                 }
             },
             confirmButton = {
