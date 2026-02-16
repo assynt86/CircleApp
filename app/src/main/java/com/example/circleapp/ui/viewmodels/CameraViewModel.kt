@@ -1,6 +1,7 @@
 package com.example.circleapp.ui.viewmodels
 
 import android.app.Application
+import android.net.Uri
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.compose.ui.geometry.Offset
@@ -8,6 +9,10 @@ import androidx.lifecycle.AndroidViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+
+enum class TimerMode(val seconds: Int) {
+    OFF(0), FIVE(5), TEN(10)
+}
 
 data class CameraUiState(
     val hasPermission: Boolean = false,
@@ -19,7 +24,11 @@ data class CameraUiState(
     val lensFacing: Int = CameraSelector.LENS_FACING_BACK,
     val focusPoint: Offset? = null,
     val showFlashUIEffect: Boolean = false,
-    val showCirclesPopup: Boolean = false
+    val showCirclesPopup: Boolean = false,
+    val lastCapturedUri: Uri? = null,
+    val showCaptureAnimation: Boolean = false,
+    val timerMode: TimerMode = TimerMode.OFF,
+    val remainingSeconds: Int = 0
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,5 +84,28 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setShowCirclesPopup(show: Boolean) {
         _uiState.update { it.copy(showCirclesPopup = show) }
+    }
+
+    fun onPhotoCaptured(uri: Uri) {
+        _uiState.update { it.copy(lastCapturedUri = uri, showCaptureAnimation = true) }
+    }
+
+    fun clearCaptureAnimation() {
+        _uiState.update { it.copy(showCaptureAnimation = false) }
+    }
+
+    fun toggleTimer() {
+        _uiState.update {
+            val nextMode = when (it.timerMode) {
+                TimerMode.OFF -> TimerMode.FIVE
+                TimerMode.FIVE -> TimerMode.TEN
+                TimerMode.TEN -> TimerMode.OFF
+            }
+            it.copy(timerMode = nextMode)
+        }
+    }
+
+    fun setRemainingSeconds(seconds: Int) {
+        _uiState.update { it.copy(remainingSeconds = seconds) }
     }
 }
