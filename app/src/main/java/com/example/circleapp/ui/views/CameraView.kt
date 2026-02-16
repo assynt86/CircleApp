@@ -2,6 +2,8 @@ package com.example.circleapp.ui.views
 
 import android.Manifest
 import android.net.Uri
+import android.view.OrientationEventListener
+import android.view.Surface
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
@@ -83,6 +85,53 @@ fun CameraView(
     var camera by remember { mutableStateOf<Camera?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     
+    // Orientation tracking
+    var rotationDegrees by remember { mutableStateOf(0f) }
+    var currentRotation by remember { mutableIntStateOf(Surface.ROTATION_0) }
+    
+    val animatedRotation by animateFloatAsState(
+        targetValue = rotationDegrees,
+        animationSpec = tween(durationMillis = 300),
+        label = "UIRotation"
+    )
+
+    val orientationEventListener = remember {
+        object : OrientationEventListener(context) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                val rotation = when (orientation) {
+                    in 45..134 -> Surface.ROTATION_270
+                    in 135..224 -> Surface.ROTATION_180
+                    in 225..314 -> Surface.ROTATION_90
+                    else -> Surface.ROTATION_0
+                }
+                val degrees = when (rotation) {
+                    Surface.ROTATION_0 -> 0f
+                    Surface.ROTATION_90 -> 90f
+                    Surface.ROTATION_180 -> 180f
+                    Surface.ROTATION_270 -> 270f
+                    else -> 0f
+                }
+                if (rotationDegrees != degrees) {
+                    rotationDegrees = degrees
+                    currentRotation = rotation
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        orientationEventListener.enable()
+        onDispose {
+            orientationEventListener.disable()
+        }
+    }
+
+    // Update ImageCapture rotation whenever currentRotation changes
+    LaunchedEffect(currentRotation, imageCapture) {
+        imageCapture?.targetRotation = currentRotation
+    }
+
     val focusAlpha by animateFloatAsState(
         targetValue = if (cameraUiState.focusPoint != null) 1f else 0f,
         animationSpec = tween(durationMillis = 200),
@@ -177,14 +226,17 @@ fun CameraView(
                     modifier = Modifier.align(Alignment.CenterStart),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = {
-                        val nextMode = when (cameraUiState.flashMode) {
-                            ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_ON
-                            ImageCapture.FLASH_MODE_ON -> ImageCapture.FLASH_MODE_AUTO
-                            else -> ImageCapture.FLASH_MODE_OFF
+                    IconButton(
+                        modifier = Modifier.graphicsLayer { rotationZ = animatedRotation },
+                        onClick = {
+                            val nextMode = when (cameraUiState.flashMode) {
+                                ImageCapture.FLASH_MODE_OFF -> ImageCapture.FLASH_MODE_ON
+                                ImageCapture.FLASH_MODE_ON -> ImageCapture.FLASH_MODE_AUTO
+                                else -> ImageCapture.FLASH_MODE_OFF
+                            }
+                            cameraViewModel.setFlashMode(nextMode)
                         }
-                        cameraViewModel.setFlashMode(nextMode)
-                    }) {
+                    ) {
                         val icon = when (cameraUiState.flashMode) {
                             ImageCapture.FLASH_MODE_ON -> Icons.Filled.FlashOn
                             ImageCapture.FLASH_MODE_AUTO -> Icons.Filled.FlashAuto
@@ -193,7 +245,10 @@ fun CameraView(
                         Icon(icon, contentDescription = "Flash Mode", tint = Color.White)
                     }
 
-                    IconButton(onClick = { cameraViewModel.toggleGrid() }) {
+                    IconButton(
+                        modifier = Modifier.graphicsLayer { rotationZ = animatedRotation },
+                        onClick = { cameraViewModel.toggleGrid() }
+                    ) {
                         Icon(
                             if (cameraUiState.showGrid) Icons.Filled.GridOn else Icons.Filled.GridOff,
                             contentDescription = "Toggle Grid",
@@ -204,7 +259,9 @@ fun CameraView(
 
                 if (minZoomRatio < 0.95f || currentZoomRatio > 1.05f) {
                     TextButton(
-                        modifier = Modifier.align(Alignment.Center),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .graphicsLayer { rotationZ = animatedRotation },
                         onClick = {
                             if (currentZoomRatio > 0.95f) {
                                 val target = if (minZoomRatio < 0.95f) minZoomRatio else 1.0f
@@ -245,10 +302,15 @@ fun CameraView(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = LeagueSpartan,
-                            modifier = Modifier.padding(end = 4.dp)
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .graphicsLayer { rotationZ = animatedRotation }
                         )
                     }
-                    IconButton(onClick = { cameraViewModel.toggleTimer() }) {
+                    IconButton(
+                        modifier = Modifier.graphicsLayer { rotationZ = animatedRotation },
+                        onClick = { cameraViewModel.toggleTimer() }
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Timer,
                             contentDescription = "Timer",
@@ -315,6 +377,7 @@ fun CameraView(
                                     .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                                     .setFlashMode(cameraUiState.flashMode)
+                                    .setTargetRotation(currentRotation)
                                     .build()
                                 imageCapture = capture
 
@@ -373,7 +436,8 @@ fun CameraView(
                             color = Color.White,
                             fontSize = 120.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = LeagueSpartan
+                            fontFamily = LeagueSpartan,
+                            modifier = Modifier.graphicsLayer { rotationZ = animatedRotation }
                         )
                     }
                 }
@@ -431,29 +495,43 @@ fun CameraView(
                     .align(Alignment.CenterStart)
                     .padding(start = 48.dp)
                     .size(60.dp)
-                    .border(2.dp, Color.White, CircleShape)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable { cameraViewModel.setShowCirclesPopup(true) }
                     .onGloballyPositioned { coords ->
                         val pos = coords.positionInRoot()
                         buttonPosition = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
-                    },
-                contentAlignment = Alignment.Center
+                    }
+                    .clickable { cameraViewModel.setShowCirclesPopup(true) }
             ) {
-                Text(
-                    "c",
-                    color = Color.White,
-                    fontSize = 64.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = LeagueSpartan,
-                    style = TextStyle(
-                        platformStyle = PlatformTextStyle(
-                            includeFontPadding = false
+                // Grouping the circle and 'c' text to rotate together as a single unit
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { rotationZ = animatedRotation },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(2.dp, Color.White, CircleShape)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.4f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "c",
+                            color = Color.White,
+                            fontSize = 64.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = LeagueSpartan,
+                            style = TextStyle(
+                                platformStyle = PlatformTextStyle(
+                                    includeFontPadding = false
+                                )
+                            ),
+                            // Offset is needed to visually center this specific font's 'c' character
+                            modifier = Modifier.offset(x = (-2).dp, y = (-4).dp)
                         )
-                    ),
-                    modifier = Modifier.offset(x = (-2).dp, y = (-4).dp)
-                )
+                    }
+                }
             }
 
             // Capture Button
@@ -518,7 +596,9 @@ fun CameraView(
                     imageVector = Icons.Filled.Camera,
                     contentDescription = "Capture photo",
                     tint = Color.White,
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier
+                        .size(64.dp)
+                        .graphicsLayer { rotationZ = animatedRotation }
                 )
             }
 
@@ -534,7 +614,8 @@ fun CameraView(
                 Icon(
                     imageVector = Icons.Filled.FlipCameraAndroid,
                     contentDescription = "Flip camera",
-                    tint = Color.White
+                    tint = Color.White,
+                    modifier = Modifier.graphicsLayer { rotationZ = animatedRotation }
                 )
             }
         }
@@ -558,6 +639,7 @@ fun CameraView(
                         scaleX = currentScale
                         scaleY = currentScale
                         alpha = currentAlpha
+                        rotationZ = animatedRotation
                     }
                     .clip(CircleShape)
                     .border(4.dp, Color.White.copy(alpha = currentAlpha), CircleShape),
