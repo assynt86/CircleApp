@@ -1,30 +1,41 @@
 package com.example.circleapp.ui.viewmodels
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.circleapp.data.SavedPhotosStore
 import com.example.circleapp.data.UserRepository
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 data class ProfileUiState(
     val name: String = "",
     val username: String = "",
     val email: String = "",
     val phone: String = "",
+    val photoUrl: String = "",
     val isAutoSaveEnabled: Boolean = false,
     val showSettingsDialog: Boolean = false,
+    val showEditNameDialog: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isEmailVisible: Boolean = false,
+    val isPhoneVisible: Boolean = false,
+    val editedName: String = ""
 )
 
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = UserRepository()
     private val savedPhotosStore = SavedPhotosStore(application)
+    private val auth = FirebaseAuth.getInstance()
+    private val storage = FirebaseStorage.getInstance()
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState = _uiState.asStateFlow()
@@ -50,6 +61,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                             username = it.username,
                             email = it.email,
                             phone = it.phone,
+                            photoUrl = it.photoUrl,
                             isLoading = false
                         )
                     }
@@ -60,11 +72,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateName(newName: String) {
-        _uiState.update { it.copy(name = newName) }
-        // Potentially save to repository here or via a separate save button
-    }
-
     fun toggleAutoSave(enabled: Boolean) {
         viewModelScope.launch {
             savedPhotosStore.setAutoSave(enabled)
@@ -73,5 +80,54 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     fun setShowSettingsDialog(show: Boolean) {
         _uiState.update { it.copy(showSettingsDialog = show) }
+    }
+
+    fun setShowEditNameDialog(show: Boolean) {
+        _uiState.update { it.copy(showEditNameDialog = show, editedName = if (show) it.name else "") }
+    }
+
+    fun updateEditedName(newName: String) {
+        _uiState.update { it.copy(editedName = newName) }
+    }
+
+    fun saveName() {
+        val uid = auth.currentUser?.uid ?: return
+        val newName = _uiState.value.editedName
+        if (newName.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                repository.updateDisplayName(uid, newName)
+                _uiState.update { it.copy(name = newName, showEditNameDialog = false, isLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
+        }
+    }
+
+    fun toggleEmailVisibility() {
+        _uiState.update { it.copy(isEmailVisible = !it.isEmailVisible) }
+    }
+
+    fun togglePhoneVisibility() {
+        _uiState.update { it.copy(isPhoneVisible = !it.isPhoneVisible) }
+    }
+
+    fun uploadProfilePicture(uri: Uri) {
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val ref = storage.reference.child("profile_pictures/$uid.jpg")
+                ref.putFile(uri).await()
+                val downloadUrl = ref.downloadUrl.await().toString()
+
+                repository.updateProfilePicture(uid, downloadUrl)
+                _uiState.update { it.copy(photoUrl = downloadUrl, isLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
+        }
     }
 }

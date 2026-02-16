@@ -40,6 +40,7 @@ class AuthRepository(
                     "username" to username.trim(),
                     "phone" to phone.trim(),
                     "displayName" to displayName.trim(),
+                    "photoUrl" to "",
                     "createdAt" to Timestamp.now()
                 )
 
