@@ -210,6 +210,12 @@ fun CircleViewContent(
                         text = "Closes in: ${uiState.remainingTime}",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                } else if (uiState.deleteInTime.isNotEmpty()) {
+                    Text(
+                        text = "Deletes in: ${uiState.deleteInTime}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
                 }
             }
 

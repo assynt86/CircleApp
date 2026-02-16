@@ -232,8 +232,9 @@ class CircleRepository {
                     val invite = snap.getString("inviteCode") ?: ""
                     val status = snap.getString("status") ?: "open"
                     val closeAt = snap.getTimestamp("closeAt")
+                    val deleteAt = snap.getTimestamp("deleteAt")
                     val ownerUid = snap.getString("ownerUid") ?: ""
-                    onSuccess(CircleInfo(name, invite, status, closeAt, ownerUid))
+                    onSuccess(CircleInfo(name, invite, status, closeAt, deleteAt, ownerUid))
                 } else {
                     onError(Exception("Circle not found"))
                 }

@@ -61,6 +61,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -210,48 +212,79 @@ fun HomeViewContent(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(uiState.circles) { circle ->
-                        val borderColor = when {
+                        val baseColor = when {
+                            circle.isClosed -> Color.Gray
                             circle.isExpiringSoon -> Color(0xFFF44336) // Red
-                            !circle.isClosed -> Color(0xFF4CAF50) // Green
-                            else -> Color.Transparent
+                            else -> Color(0xFF4CAF50) // Green
                         }
+                        val progress = circle.remainingProgress
 
-                        Card(
-                            shape = CircleShape,
-                            border = if (borderColor != Color.Transparent) BorderStroke(4.dp, borderColor) else null,
+                        Box(
                             modifier = Modifier
                                 .clickable { onCircleClick(circle.id) }
-                                .aspectRatio(1f)
+                                .aspectRatio(1f),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
+                            // Draw dynamic progress border
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val strokeWidth = 4.dp.toPx()
+                                val diameter = size.minDimension - strokeWidth
+                                
+                                // Faded background circle (elapsed time)
+                                drawCircle(
+                                    color = baseColor.copy(alpha = 0.3f),
+                                    radius = diameter / 2,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                                
+                                // Solid progress arc (remaining time)
+                                drawArc(
+                                    color = baseColor,
+                                    startAngle = -90f,
+                                    sweepAngle = 360f * progress,
+                                    useCenter = false,
+                                    topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
+                                    size = Size(diameter, diameter),
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+
+                            Card(
+                                shape = CircleShape,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color.Black),
-                                contentAlignment = Alignment.Center
+                                    .padding(6.dp) // Inset to leave room for border
                             ) {
-                                if (circle.previewUrl != null) {
-                                    AsyncImage(
-                                        model = circle.previewUrl,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .alpha(0.5f),
-                                        contentScale = ContentScale.Crop
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (circle.previewUrl != null) {
+                                        AsyncImage(
+                                            model = circle.previewUrl,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .alpha(0.5f),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+
+                                    Text(
+                                        text = circle.name,
+                                        modifier = Modifier.padding(12.dp),
+                                        textAlign = TextAlign.Center,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontSize = 32.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                        softWrap = true,
+                                        maxLines = 2
                                     )
                                 }
-
-                                Text(
-                                    text = circle.name,
-                                    modifier = Modifier.padding(12.dp),
-                                    textAlign = TextAlign.Center,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 32.sp,
-                                        fontWeight = FontWeight.ExtraBold
-                                    ),
-                                    softWrap = true,
-                                    maxLines = 2
-                                )
                             }
                         }
                     }

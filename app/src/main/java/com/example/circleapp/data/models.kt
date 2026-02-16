@@ -34,6 +34,29 @@ data class Circle(
             val closeAtMillis = closeAt?.toDate()?.time ?: return false
             return (closeAtMillis - now) < TimeUnit.DAYS.toMillis(1)
         }
+
+    @get:Exclude
+    val remainingProgress: Float
+        get() {
+            val now = System.currentTimeMillis()
+            if (isClosed) {
+                // Progress towards deletion
+                val start = closeAt?.toDate()?.time ?: return 0f
+                val end = deleteAt?.toDate()?.time ?: return 0f
+                val total = end - start
+                if (total <= 0) return 0f
+                val remaining = end - now
+                return (remaining.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            } else {
+                // Progress towards closing
+                val start = createdAt?.toDate()?.time ?: return 1f
+                val end = closeAt?.toDate()?.time ?: return 0f
+                val total = end - start
+                if (total <= 0) return 0f
+                val remaining = end - now
+                return (remaining.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            }
+        }
 }
 
 data class Photo(
@@ -48,6 +71,7 @@ data class CircleInfo(
     val inviteCode: String,
     val status: String,
     val closeAt: Timestamp?,
+    val deleteAt: Timestamp? = null,
     val ownerUid: String
 ) {
     val isClosed: Boolean

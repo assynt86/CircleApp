@@ -28,6 +28,7 @@ data class CircleUiState(
     val error: String? = null,
     val isUploading: Boolean = false,
     val remainingTime: String = "",
+    val deleteInTime: String = "",
     val showCamera: Boolean = false,
     val fullscreenImage: Int? = null,
     val inProgressSaves: List<String> = emptyList(),
@@ -57,7 +58,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         repository.listenToCircle(circleId,
             onSuccess = { circle ->
                 _uiState.update { it.copy(circleInfo = circle) }
-                startRemainingTimeUpdater()
+                startTimeUpdaters()
             },
             onError = { e -> _uiState.update { it.copy(error = e.message) } }
         )
@@ -100,23 +101,35 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         )
     }
 
-    private fun startRemainingTimeUpdater() {
+    private fun startTimeUpdaters() {
         viewModelScope.launch {
             while (true) {
-                val closeAtMillis = _uiState.value.circleInfo?.closeAt?.toDate()?.time
-                if (closeAtMillis == null) {
-                    delay(1000)
-                    continue
+                val now = System.currentTimeMillis()
+                val circleInfo = _uiState.value.circleInfo ?: break
+
+                val closeAtMillis = circleInfo.closeAt?.toDate()?.time
+                val deleteAtMillis = circleInfo.deleteAt?.toDate()?.time
+
+                if (closeAtMillis != null) {
+                    val remainingClose = closeAtMillis - now
+                    if (remainingClose > 0) {
+                        val formattedTime = DateUtils.formatElapsedTime(remainingClose / 1000)
+                        _uiState.update { it.copy(remainingTime = formattedTime) }
+                    } else {
+                        _uiState.update { it.copy(remainingTime = "") }
+                    }
                 }
 
-                val remaining = closeAtMillis - System.currentTimeMillis()
-                if (remaining > 0) {
-                    val formattedTime = DateUtils.formatElapsedTime(remaining / 1000)
-                    _uiState.update { it.copy(remainingTime = formattedTime) }
-                } else {
-                    _uiState.update { it.copy(remainingTime = "", circleInfo = it.circleInfo?.copy()) }
-                    break
+                if (deleteAtMillis != null) {
+                    val remainingDelete = deleteAtMillis - now
+                    if (remainingDelete > 0) {
+                        val formattedTime = DateUtils.formatElapsedTime(remainingDelete / 1000)
+                        _uiState.update { it.copy(deleteInTime = formattedTime) }
+                    } else {
+                        _uiState.update { it.copy(deleteInTime = "") }
+                    }
                 }
+
                 delay(1000)
             }
         }
