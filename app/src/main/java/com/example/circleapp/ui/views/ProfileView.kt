@@ -18,9 +18,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font. FontWeight
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.circleapp.ui.theme.LeagueSpartan
@@ -34,12 +36,41 @@ fun ProfileView(
 ){
     val uiState by profileViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    
+    var showFullScreenPhoto by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
             profileViewModel.uploadProfilePicture(it)
+        }
+    }
+
+    // Full screen photo viewer
+    if (showFullScreenPhoto && uiState.photoUrl.isNotEmpty()) {
+        Dialog(
+            onDismissRequest = { showFullScreenPhoto = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f))
+                    .clickable { showFullScreenPhoto = false },
+                contentAlignment = Alignment.TopCenter
+            ) {
+                AsyncImage(
+                    model = uiState.photoUrl,
+                    contentDescription = "Full Screen Profile Picture",
+                    modifier = Modifier
+                        .padding(top = 100.dp) // Upper middle section
+                        .fillMaxWidth(0.9f)
+                        .aspectRatio(1f)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
     }
 
@@ -136,7 +167,9 @@ fun ProfileView(
                         .size(160.dp)
                         .clip(CircleShape)
                         .background(Color.LightGray)
-                        .clickable { photoPickerLauncher.launch("image/*") },
+                        .clickable(enabled = uiState.photoUrl.isNotEmpty()) {
+                            showFullScreenPhoto = true
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     if (uiState.photoUrl.isNotEmpty()) {
@@ -149,7 +182,7 @@ fun ProfileView(
                     } else {
                         Icon(
                             imageVector = Icons.Default.Person,
-                            contentDescription = "Upload Profile Picture",
+                            contentDescription = "Profile Placeholder",
                             modifier = Modifier.size(80.dp),
                             tint = Color.White
                         )
@@ -158,16 +191,18 @@ fun ProfileView(
                     // Overlay "Edit" hint
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.BottomCenter
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(Color.Black.copy(alpha = 0.4f))
+                            .clickable { photoPickerLauncher.launch("image/*") },
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
                             "Edit",
                             color = Color.White,
-                            fontSize = 16.sp,
-                            fontFamily = LeagueSpartan,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            fontSize = 14.sp,
+                            fontFamily = LeagueSpartan
                         )
                     }
                 }
