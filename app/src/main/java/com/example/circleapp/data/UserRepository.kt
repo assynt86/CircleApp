@@ -14,4 +14,12 @@ class UserRepository {
         val document = db.collection("users").document(firebaseUser.uid).get().await()
         return document.toObject(UserProfile::class.java)
     }
+
+    suspend fun updateProfilePicture(uid: String, photoUrl: String) {
+        db.collection("users").document(uid).update("photoUrl", photoUrl).await()
+    }
+
+    suspend fun updateDisplayName(uid: String, displayName: String) {
+        db.collection("users").document(uid).update("displayName", displayName).await()
+    }
 }
