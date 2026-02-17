@@ -1,44 +1,80 @@
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { logger } from "firebase-functions";
 
 admin.initializeApp();
 
-export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => {
-  const db = admin.firestore();
-  const bucket = admin.storage().bucket();
+const db = admin.firestore();
+const bucket = admin.storage().bucket();
+
+export const cleanupExpiredCircles = onSchedule("every 5 minutes", async () => {
+  logger.info("cleanupExpiredCircles triggered");
 
   const now = admin.firestore.Timestamp.now();
 
-  // Find circles that should be deleted and not already cleaned
   const circlesSnap = await db
     .collection("circles")
-    .where("deleteAt", "<=", now)
     .where("cleanedUp", "==", false)
+    .where("deleteAt", "<=", now)
     .limit(25)
     .get();
+
+  logger.info(`cleanupExpiredCircles: found ${circlesSnap.size} expired circle(s).`);
 
   if (circlesSnap.empty) return;
 
   for (const circleDoc of circlesSnap.docs) {
     const circleId = circleDoc.id;
 
-    // 1) Delete all files in Storage under circles/{circleId}/
-    const [files] = await bucket.getFiles({ prefix: `circles/${circleId}/` });
-    await Promise.all(files.map((f) => f.delete().catch(() => null)));
+    try {
+      await circleDoc.ref.update({
+        cleanupInProgress: true,
+        cleanupStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-    // 2) Delete photo metadata docs
-    const photosSnap = await db
-      .collection("circles")
-      .doc(circleId)
-      .collection("photos")
-      .get();
+      const photosRef = db.collection("circles").doc(circleId).collection("photos");
+      const photosSnap = await photosRef.get();
 
-    const batch = db.batch();
-    photosSnap.docs.forEach((d) => batch.delete(d.ref));
+      logger.info(`Circle ${circleId}: found ${photosSnap.size} photo doc(s).`);
 
-    // 3) Mark circle cleanedUp so it won’t run again
-    batch.update(circleDoc.ref, { cleanedUp: true });
+      await Promise.all(
+        photosSnap.docs.map(async (photoDoc) => {
+          const data = photoDoc.data() as { storagePath?: string };
+          const storagePath = data.storagePath;
 
-    await batch.commit();
+          if (!storagePath) return;
+
+          await bucket.file(storagePath).delete({ ignoreNotFound: true });
+        })
+      );
+
+      const photoDocs = photosSnap.docs;
+      const chunkSize = 400;
+
+      for (let i = 0; i < photoDocs.length; i += chunkSize) {
+        const batch = db.batch();
+        const chunk = photoDocs.slice(i, i + chunkSize);
+        chunk.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+
+      await circleDoc.ref.delete();
+
+      logger.info(`Circle ${circleId}: deleted circle + all photos.`);
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : "Unknown error";
+
+      logger.error(`Circle ${circleId}: cleanup failed: ${msg}`);
+
+      await circleDoc.ref.set(
+        {
+          cleanedUp: true,
+          cleanupError: msg,
+          cleanedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
   }
 });

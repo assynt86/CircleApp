@@ -48,6 +48,38 @@ fun ProfileView(
         )
     }
 
+    if (uiState.showBugReportDialog) {
+        AlertDialog(
+            onDismissRequest = { profileViewModel.setShowBugReportDialog(false) },
+            title = { Text("Report Bug") },
+            text = {
+                Column {
+                    Text("Please describe the bug you encountered:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = uiState.bugDescription,
+                        onValueChange = { profileViewModel.updateBugDescription(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { profileViewModel.submitBugReport() },
+                    enabled = uiState.bugDescription.isNotBlank()
+                ) {
+                    Text("Submit")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { profileViewModel.setShowBugReportDialog(false) }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -131,6 +163,15 @@ fun ProfileView(
                 Icon(Icons.Default.Settings, contentDescription = "Settings")
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Settings")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { profileViewModel.setShowBugReportDialog(true) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.BugReport, contentDescription = "Report Bug")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Report Bug")
             }
         }
 

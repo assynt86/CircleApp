@@ -18,6 +18,8 @@ data class ProfileUiState(
     val phone: String = "",
     val isAutoSaveEnabled: Boolean = false,
     val showSettingsDialog: Boolean = false,
+    val showBugReportDialog: Boolean = false,
+    val bugDescription: String = "",
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -62,7 +64,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateName(newName: String) {
         _uiState.update { it.copy(name = newName) }
-        // Potentially save to repository here or via a separate save button
     }
 
     fun toggleAutoSave(enabled: Boolean) {
@@ -73,5 +74,27 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     fun setShowSettingsDialog(show: Boolean) {
         _uiState.update { it.copy(showSettingsDialog = show) }
+    }
+
+    fun setShowBugReportDialog(show: Boolean) {
+        _uiState.update { it.copy(showBugReportDialog = show, bugDescription = "") }
+    }
+
+    fun updateBugDescription(description: String) {
+        _uiState.update { it.copy(bugDescription = description) }
+    }
+
+    fun submitBugReport() {
+        val description = _uiState.value.bugDescription
+        if (description.isBlank()) return
+
+        viewModelScope.launch {
+            try {
+                repository.reportBug(description)
+                setShowBugReportDialog(false)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to report bug: ${e.message}") }
+            }
+        }
     }
 }
