@@ -7,25 +7,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -35,28 +22,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -79,6 +46,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.circleapp.R
+import com.example.circleapp.ui.theme.LeagueSpartan
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
 
@@ -200,12 +168,17 @@ fun HomeViewContent(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Text("Your circles", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Your circles", 
+                style = MaterialTheme.typography.titleMedium,
+                fontFamily = LeagueSpartan,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(Modifier.height(16.dp))
 
             if (uiState.circles.isEmpty() && !uiState.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No circles yet. Create or join one!")
+                    Text("No circles yet. Create or join one!", fontFamily = LeagueSpartan)
                 }
             } else {
                 LazyVerticalGrid(
@@ -284,6 +257,7 @@ fun HomeViewContent(
                                             fontSize = 32.sp,
                                             fontWeight = FontWeight.ExtraBold
                                         ),
+                                        fontFamily = LeagueSpartan,
                                         softWrap = true,
                                         maxLines = 2
                                     )
@@ -299,17 +273,17 @@ fun HomeViewContent(
     if (uiState.isCreateCircleDialogVisible) {
         AlertDialog(
             onDismissRequest = { onShowCreateCircleDialog(false) },
-            title = { Text("Create a Circle") },
+            title = { Text("Create a Circle", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = uiState.newCircleName,
                         onValueChange = onNewCircleNameChange,
-                        label = { Text("Circle name") },
+                        label = { Text("Circle name", fontFamily = LeagueSpartan) },
                         singleLine = true
                     )
                     Spacer(Modifier.height(24.dp))
-                    Text("Duration: ${uiState.newCircleDurationDays.toInt()} days")
+                    Text("Duration: ${uiState.newCircleDurationDays.toInt()} days", fontFamily = LeagueSpartan)
                     Slider(
                         value = uiState.newCircleDurationDays,
                         onValueChange = onNewCircleDurationChange,
@@ -323,12 +297,12 @@ fun HomeViewContent(
                     onClick = onCreateCircle,
                     enabled = uiState.newCircleName.isNotBlank()
                 ) {
-                    Text("Create")
+                    Text("Create", fontFamily = LeagueSpartan)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { onShowCreateCircleDialog(false) }) {
-                    Text("Cancel")
+                    Text("Cancel", fontFamily = LeagueSpartan)
                 }
             }
         )
@@ -352,7 +326,7 @@ fun HomeViewContent(
 
         AlertDialog(
             onDismissRequest = { onShowJoinCircleDialog(false) },
-            title = { Text("Join a Circle") },
+            title = { Text("Join a Circle", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (hasCameraPermission) {
@@ -397,11 +371,11 @@ fun HomeViewContent(
                                 .clickable { permissionLauncher.launch(android.Manifest.permission.CAMERA) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Tap to enable Camera", color = Color.White)
+                            Text("Tap to enable Camera", color = Color.White, fontFamily = LeagueSpartan)
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    Text("Or enter code manually")
+                    Text("Or enter code manually", fontFamily = LeagueSpartan)
                     Spacer(Modifier.height(8.dp))
                     BasicTextField(
                         value = uiState.joinInviteCode,
@@ -424,6 +398,7 @@ fun HomeViewContent(
                                         Text(
                                             text = char?.toString() ?: "_",
                                             style = MaterialTheme.typography.headlineMedium,
+                                            fontFamily = LeagueSpartan,
                                             color = if (char == null) Color.Gray else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
@@ -438,12 +413,12 @@ fun HomeViewContent(
                     onClick = onJoinCircle,
                     enabled = uiState.joinInviteCode.length == 6
                 ) {
-                    Text("Join")
+                    Text("Join", fontFamily = LeagueSpartan)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { onShowJoinCircleDialog(false) }) {
-                    Text("Cancel")
+                    Text("Cancel", fontFamily = LeagueSpartan)
                 }
             }
         )
