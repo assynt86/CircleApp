@@ -9,9 +9,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -21,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.circleapp.ui.theme.CircleAppTheme
 import com.example.circleapp.ui.viewmodels.HomeViewModel
+import com.example.circleapp.ui.viewmodels.MainViewModel
 import com.example.circleapp.ui.views.CameraView
 import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
@@ -30,13 +29,18 @@ import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.views.AuthView
 import com.example.circleapp.ui.viewmodels.AuthViewModel
 
-
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            CircleAppTheme {
+            val mainViewModel: MainViewModel = viewModel()
+            val useSystemTheme by mainViewModel.useSystemTheme.collectAsState(initial = true)
+            val isDarkMode by mainViewModel.isDarkMode.collectAsState(initial = true)
+
+            CircleAppTheme(
+                useSystemTheme = useSystemTheme,
+                isDarkMode = isDarkMode
+            ) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     AppNavigation()
                 }
@@ -50,10 +54,32 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
+    val auth = FirebaseAuth.getInstance()
 
-    // Gate the app: if not signed in, start at auth screen
-    val isSignedIn = FirebaseAuth.getInstance().currentUser != null
-    val startDest = if (isSignedIn) "main" else "auth"
+    // Track authentication state reactively
+    var currentUser by remember { mutableStateOf(auth.currentUser) }
+
+    DisposableEffect(auth) {
+        val listener = FirebaseAuth.AuthStateListener {
+            currentUser = it.currentUser
+        }
+        auth.addAuthStateListener(listener)
+        onDispose {
+            auth.removeAuthStateListener(listener)
+        }
+    }
+
+    // Determine the start destination once based on initial state.
+    val startDest = if (currentUser != null) "main" else "auth"
+
+    // Guard the app: if auth state becomes null, immediately push to auth screen
+    LaunchedEffect(currentUser) {
+        if (currentUser == null) {
+            navController.navigate("auth") {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = startDest) {
 
@@ -63,7 +89,6 @@ fun AppNavigation() {
             AuthView(
                 authViewModel = authVm,
                 onAuthed = {
-                    // After login/signup, go to main and remove auth from back stack
                     navController.navigate("main") {
                         popUpTo("auth") { inclusive = true }
                     }
@@ -77,7 +102,7 @@ fun AppNavigation() {
             arguments = listOf(
                 navArgument("startPage") {
                     type = NavType.IntType
-                    defaultValue = 0 // Startup on CameraView (page 0)
+                    defaultValue = 0 
                 },
                 navArgument("circleId") {
                     type = NavType.StringType
@@ -85,20 +110,10 @@ fun AppNavigation() {
                 }
             )
         ) { backStackEntry ->
-
             val homeViewModel: HomeViewModel = viewModel()
-
-            // startPage is used for the initial page when the entry is first created.
-            // rememberPagerState uses rememberSaveable, so it will survive back navigation
-            // to this same backstack entry without being reset by the initialPage value.
             val startPage = backStackEntry.arguments?.getInt("startPage") ?: 0
             val circleId = backStackEntry.arguments?.getString("circleId")
-
             val pagerState = rememberPagerState(initialPage = startPage) { 3 }
-
-            // Removed the LaunchedEffect that was forcing the pager to startPage.
-            // This allows the pager to restore its previous page (e.g., HomeView)
-            // when the user navigates back from a CircleView.
 
             HorizontalPager(state = pagerState) { page ->
                 when (page) {
@@ -131,10 +146,7 @@ fun AppNavigation() {
 
                     2 -> ProfileView(
                         onLogout = {
-                            FirebaseAuth.getInstance().signOut()
-                            navController.navigate("auth") {
-                                popUpTo("main") { inclusive = true }
-                            }
+                            auth.signOut()
                         }
                     )
                 }
@@ -152,7 +164,6 @@ fun AppNavigation() {
                     circleId = circleId,
                     onBack = { navController.popBackStack() },
                     onCameraClick = { currentCircleId ->
-                        // Navigate to a new main entry starting on the Camera page
                         navController.navigate("main?startPage=0&circleId=$currentCircleId")
                     }
                 )

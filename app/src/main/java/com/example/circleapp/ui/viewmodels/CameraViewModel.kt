@@ -28,7 +28,10 @@ data class CameraUiState(
     val lastCapturedUri: Uri? = null,
     val showCaptureAnimation: Boolean = false,
     val timerMode: TimerMode = TimerMode.OFF,
-    val remainingSeconds: Int = 0
+    val remainingSeconds: Int = 0,
+    val isCameraReady: Boolean = false,
+    val cameraInitializationError: String? = null,
+    val retryTrigger: Int = 0
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -61,7 +64,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 lensFacing = if (it.lensFacing == CameraSelector.LENS_FACING_BACK)
                     CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK,
                 zoomLevel = 0f,
-                focusPoint = null
+                focusPoint = null,
+                isCameraReady = false,
+                cameraInitializationError = null
             )
         }
     }
@@ -107,5 +112,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setRemainingSeconds(seconds: Int) {
         _uiState.update { it.copy(remainingSeconds = seconds) }
+    }
+
+    fun setCameraReady(ready: Boolean) {
+        _uiState.update { it.copy(isCameraReady = ready, cameraInitializationError = null) }
+    }
+
+    fun setCameraError(error: String?) {
+        _uiState.update { it.copy(isCameraReady = false, cameraInitializationError = error) }
+    }
+
+    fun retryCamera() {
+        _uiState.update { it.copy(cameraInitializationError = null, isCameraReady = false, retryTrigger = it.retryTrigger + 1) }
     }
 }

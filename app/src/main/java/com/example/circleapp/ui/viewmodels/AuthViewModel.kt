@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.update
  * Stores input fields + loading + error message + current mode.
  */
 data class AuthUiState(
-    val email: String = "",
+    val identifier: String = "", // Used for login (email, username, or phone)
+    val email: String = "",      // Used for signup
     val password: String = "",
     val username: String = "",
     val phone: String = "",
@@ -38,6 +39,7 @@ class AuthViewModel(
 
     fun isSignedIn(): Boolean = repo.isSignedIn()
 
+    fun updateIdentifier(v: String) { _uiState.update { it.copy(identifier = v, error = "") } }
     fun updateEmail(v: String) { _uiState.update { it.copy(email = v, error = "") } }
     fun updatePassword(v: String) { _uiState.update { it.copy(password = v, error = "") } }
     fun updateUsername(v: String) { _uiState.update { it.copy(username = v, error = "") } }
@@ -50,10 +52,58 @@ class AuthViewModel(
         }
     }
 
+    private fun validateLogin(): Boolean {
+        val state = _uiState.value
+        if (state.identifier.isBlank()) {
+            _uiState.update { it.copy(error = "Please enter your email, username, or phone") }
+            return false
+        }
+        if (state.password.isBlank()) {
+            _uiState.update { it.copy(error = "Please enter your password") }
+            return false
+        }
+        return true
+    }
+
+    private fun validateSignUp(): Boolean {
+        val state = _uiState.value
+        if (state.email.isBlank()) {
+            _uiState.update { it.copy(error = "Email cannot be empty") }
+            return false
+        }
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(state.email).matches()) {
+            _uiState.update { it.copy(error = "Please enter a valid email address") }
+            return false
+        }
+        if (state.password.isBlank()) {
+            _uiState.update { it.copy(error = "Password cannot be empty") }
+            return false
+        }
+        if (state.password.length < 6) {
+            _uiState.update { it.copy(error = "Password must be at least 6 characters") }
+            return false
+        }
+        if (state.displayName.isBlank()) {
+            _uiState.update { it.copy(error = "Name cannot be empty") }
+            return false
+        }
+        if (state.username.isBlank()) {
+            _uiState.update { it.copy(error = "Username cannot be empty") }
+            return false
+        }
+        if (state.phone.isBlank()) {
+            _uiState.update { it.copy(error = "Phone number cannot be empty") }
+            return false
+        }
+        return true
+    }
+
     fun login(onSuccess: () -> Unit) {
+        if (!validateLogin()) return
+        
         _uiState.update { it.copy(isLoading = true, error = "") }
-        repo.loginWithEmail(
-            email = _uiState.value.email,
+        repo.login(
+            identifier = _uiState.value.identifier,
             password = _uiState.value.password,
             onSuccess = {
                 _uiState.update { it.copy(isLoading = false) }
@@ -66,6 +116,8 @@ class AuthViewModel(
     }
 
     fun signUp(onSuccess: () -> Unit) {
+        if (!validateSignUp()) return
+
         _uiState.update { it.copy(isLoading = true, error = "") }
         repo.signUpWithEmail(
             email = _uiState.value.email,

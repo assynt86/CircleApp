@@ -104,5 +104,6 @@ data class UserProfile(
     val username: String = "",
     val phone: String = "",
     val displayName: String = "",
+    val photoUrl: String = "",
     val createdAt: Timestamp? = null
 )

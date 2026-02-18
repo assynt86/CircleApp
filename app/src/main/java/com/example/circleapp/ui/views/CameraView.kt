@@ -45,6 +45,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -184,6 +185,19 @@ fun CameraView(
         }
     }
 
+    // Automatic background retry if camera fails to load or takes too long
+    LaunchedEffect(cameraUiState.cameraInitializationError, cameraUiState.isCameraReady, cameraUiState.retryTrigger) {
+        if (cameraUiState.cameraInitializationError != null) {
+            delay(3000) // Wait 3 seconds before retrying on error
+            cameraViewModel.retryCamera()
+        } else if (!cameraUiState.isCameraReady && cameraUiState.hasPermission) {
+            delay(8000) // 8 second timeout for "stuck" initialization
+            if (!cameraUiState.isCameraReady) {
+                cameraViewModel.retryCamera()
+            }
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted -> cameraViewModel.onPermissionResult(isGranted) }
@@ -197,7 +211,7 @@ fun CameraView(
     if (!cameraUiState.hasPermission) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Camera permission is required.", color = Color.White)
+                Text("Camera permission is required.", color = MaterialTheme.colorScheme.onBackground)
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
                     Text("Grant Permission")
@@ -210,7 +224,7 @@ fun CameraView(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.background)
             .onGloballyPositioned { coords ->
                 screenCenter = Offset(coords.size.width / 2f, coords.size.height / 2f)
             }
@@ -242,7 +256,7 @@ fun CameraView(
                             ImageCapture.FLASH_MODE_AUTO -> Icons.Filled.FlashAuto
                             else -> Icons.Filled.FlashOff
                         }
-                        Icon(icon, contentDescription = "Flash Mode", tint = Color.White)
+                        Icon(icon, contentDescription = "Flash Mode", tint = MaterialTheme.colorScheme.onBackground)
                     }
 
                     IconButton(
@@ -252,7 +266,7 @@ fun CameraView(
                         Icon(
                             if (cameraUiState.showGrid) Icons.Filled.GridOn else Icons.Filled.GridOff,
                             contentDescription = "Toggle Grid",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
@@ -275,12 +289,12 @@ fun CameraView(
                     ) {
                         Box(
                             modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape)
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(
                                 text = "%.1fx".format(Locale.US, currentZoomRatio),
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onBackground,
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -314,7 +328,7 @@ fun CameraView(
                         Icon(
                             imageVector = Icons.Filled.Timer,
                             contentDescription = "Timer",
-                            tint = if (cameraUiState.timerMode != TimerMode.OFF) Color.Yellow else Color.White
+                            tint = if (cameraUiState.timerMode != TimerMode.OFF) Color.Yellow else MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
@@ -357,7 +371,7 @@ fun CameraView(
                         }
                     }
             ) {
-                key(cameraUiState.lensFacing) {
+                key(cameraUiState.lensFacing, cameraUiState.retryTrigger) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
@@ -367,21 +381,21 @@ fun CameraView(
                             previewView = view
                             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                             cameraProviderFuture.addListener({
-                                val cameraProvider = cameraProviderFuture.get()
-                                val preview = Preview.Builder()
-                                    .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                                    .build().also { p ->
-                                        p.setSurfaceProvider(view.surfaceProvider)
-                                    }
-                                val capture = ImageCapture.Builder()
-                                    .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                                    .setFlashMode(cameraUiState.flashMode)
-                                    .setTargetRotation(currentRotation)
-                                    .build()
-                                imageCapture = capture
-
                                 try {
+                                    val cameraProvider = cameraProviderFuture.get()
+                                    val preview = Preview.Builder()
+                                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                                        .build().also { p ->
+                                            p.setSurfaceProvider(view.surfaceProvider)
+                                        }
+                                    val capture = ImageCapture.Builder()
+                                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                        .setFlashMode(cameraUiState.flashMode)
+                                        .setTargetRotation(currentRotation)
+                                        .build()
+                                    imageCapture = capture
+
                                     cameraProvider.unbindAll()
                                     camera = cameraProvider.bindToLifecycle(
                                         lifecycleOwner,
@@ -389,13 +403,34 @@ fun CameraView(
                                         preview,
                                         capture
                                     )
+                                    cameraViewModel.setCameraReady(true)
                                 } catch (e: Exception) {
                                     e.printStackTrace()
+                                    cameraViewModel.setCameraError(e.localizedMessage ?: "Camera binding failed")
                                 }
                             }, ContextCompat.getMainExecutor(ctx))
                             view
                         }
                     )
+                }
+
+                if (!cameraUiState.isCameraReady) {
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Color.White)
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = if (cameraUiState.cameraInitializationError != null) 
+                                    "Retrying camera connection..." 
+                                else 
+                                    "Loading camera...",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 32.dp)
+                            )
+                        }
+                    }
                 }
 
                 cameraUiState.focusPoint?.let { point ->
@@ -469,14 +504,14 @@ fun CameraView(
                     .padding(start = 24.dp)
                     .width(2.dp)
                     .height(200.dp)
-                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(1.dp)),
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f), RoundedCornerShape(1.dp)),
                 contentAlignment = Alignment.BottomCenter
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(cameraUiState.zoomLevel.coerceIn(0.01f, 1f))
-                        .background(Color.White, RoundedCornerShape(1.dp))
+                        .background(MaterialTheme.colorScheme.onBackground, RoundedCornerShape(1.dp))
                 )
             }
         }
@@ -501,7 +536,6 @@ fun CameraView(
                     }
                     .clickable { cameraViewModel.setShowCirclesPopup(true) }
             ) {
-                // Grouping the circle and 'c' text to rotate together as a single unit
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -511,14 +545,14 @@ fun CameraView(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .border(2.dp, Color.White, CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.4f)),
+                            .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             "c",
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontSize = 64.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = LeagueSpartan,
@@ -527,7 +561,6 @@ fun CameraView(
                                     includeFontPadding = false
                                 )
                             ),
-                            // Offset is needed to visually center this specific font's 'c' character
                             modifier = Modifier.offset(x = (-2).dp, y = (-4).dp)
                         )
                     }
@@ -538,7 +571,7 @@ fun CameraView(
             IconButton(
                 modifier = Modifier
                     .size(110.dp)
-                    .border(5.dp, Color.White, CircleShape),
+                    .border(5.dp, MaterialTheme.colorScheme.onBackground, CircleShape),
                 onClick = {
                     if (cameraUiState.isCapturing || cameraUiState.remainingSeconds > 0) return@IconButton
                     
@@ -590,12 +623,12 @@ fun CameraView(
                         )
                     }
                 },
-                enabled = !cameraUiState.isCapturing && homeUiState.selectedCircleIds.isNotEmpty()
+                enabled = !cameraUiState.isCapturing && homeUiState.selectedCircleIds.isNotEmpty() && cameraUiState.isCameraReady
             ) {
                 Icon(
                     imageVector = Icons.Filled.Camera,
                     contentDescription = "Capture photo",
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier
                         .size(64.dp)
                         .graphicsLayer { rotationZ = animatedRotation }
@@ -608,13 +641,13 @@ fun CameraView(
                     .align(Alignment.CenterEnd)
                     .padding(end = 48.dp)
                     .size(48.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape),
                 onClick = { cameraViewModel.toggleLensFacing() }
             ) {
                 Icon(
                     imageVector = Icons.Filled.FlipCameraAndroid,
                     contentDescription = "Flip camera",
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.graphicsLayer { rotationZ = animatedRotation }
                 )
             }
@@ -642,7 +675,7 @@ fun CameraView(
                         rotationZ = animatedRotation
                     }
                     .clip(CircleShape)
-                    .border(4.dp, Color.White.copy(alpha = currentAlpha), CircleShape),
+                    .border(4.dp, MaterialTheme.colorScheme.onBackground.copy(alpha = currentAlpha), CircleShape),
                 contentScale = ContentScale.Crop
             )
         }
