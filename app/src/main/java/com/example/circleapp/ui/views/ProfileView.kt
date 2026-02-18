@@ -121,6 +121,27 @@ fun ProfileView(
                             enabled = !uiState.useSystemTheme
                         )
                     }
+
+                    HorizontalDivider()
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                profileViewModel.setShowSettingsDialog(false)
+                                profileViewModel.setShowBugReportDialog(true)
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Report Bug", fontFamily = LeagueSpartan)
+                        Icon(
+                            imageVector = Icons.Default.BugReport,
+                            contentDescription = "Report Bug",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -150,6 +171,38 @@ fun ProfileView(
             },
             dismissButton = {
                 TextButton(onClick = { profileViewModel.setShowEditNameDialog(false) }) {
+                    Text("Cancel", fontFamily = LeagueSpartan)
+                }
+            }
+        )
+    }
+
+    if (uiState.showBugReportDialog) {
+        AlertDialog(
+            onDismissRequest = { profileViewModel.setShowBugReportDialog(false) },
+            title = { Text("Report Bug", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Please describe the bug you encountered:", fontFamily = LeagueSpartan)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = uiState.bugDescription,
+                        onValueChange = { profileViewModel.updateBugDescription(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { profileViewModel.submitBugReport() },
+                    enabled = uiState.bugDescription.isNotBlank()
+                ) {
+                    Text("Submit", fontFamily = LeagueSpartan)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { profileViewModel.setShowBugReportDialog(false) }) {
                     Text("Cancel", fontFamily = LeagueSpartan)
                 }
             }
@@ -385,7 +438,7 @@ fun CensoredInfoLabel(
             fontSize = 22.sp
         )
         Text(
-            text = if (isVisible) value else "•".repeat(value.length.coerceAtLeast(8)),
+            text = if (isVisible) value else "••••••••••••",
             fontFamily = LeagueSpartan,
             fontSize = 22.sp,
             modifier = Modifier.weight(1f)
