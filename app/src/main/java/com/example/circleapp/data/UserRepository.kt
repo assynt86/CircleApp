@@ -22,4 +22,8 @@ class UserRepository {
     suspend fun updateDisplayName(uid: String, displayName: String) {
         db.collection("users").document(uid).update("displayName", displayName).await()
     }
+
+    suspend fun setAutoAcceptInvites(uid: String, enabled: Boolean) {
+        db.collection("users").document(uid).update("autoAcceptInvites", enabled).await()
+    }
 }

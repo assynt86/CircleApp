@@ -7,9 +7,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.circleapp.data.Circle
 import com.example.circleapp.data.CirclePreferencesStore
 import com.example.circleapp.data.CircleRepository
+import com.example.circleapp.data.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -31,12 +33,17 @@ data class HomeUiState(
     val isCapturing: Boolean = false,
     val cameraNavigationState: CameraNavigationState = CameraNavigationState(),
     val isLoading: Boolean = true,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val previewCircle: Circle? = null,
+    val showJoinPreview: Boolean = false,
+    val autoAcceptInvites: Boolean = false,
+    val pendingInvitesCount: Int = 0
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = CircleRepository()
+    private val userRepository = UserRepository()
     private val prefsStore = CirclePreferencesStore(application)
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -49,6 +56,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         loadUserCircles()
+        loadUserSettings()
+        listenToInvites()
+    }
+
+    private fun loadUserSettings() {
+        viewModelScope.launch {
+            val user = userRepository.getCurrentUser()
+            _uiState.update { it.copy(autoAcceptInvites = user?.autoAcceptInvites ?: false) }
+        }
+    }
+
+    private fun listenToInvites() {
+        viewModelScope.launch {
+            repository.listenToCircleInvites().collectLatest { invites ->
+                _uiState.update { it.copy(pendingInvitesCount = invites.size) }
+            }
+        }
     }
 
     private fun loadUserCircles() {
@@ -176,21 +200,50 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun joinCircle(onSuccess: (String) -> Unit) {
+    fun onJoinClick(onSuccess: (String) -> Unit) {
         val currentInviteCode = _uiState.value.joinInviteCode
+        if (currentInviteCode.length < 6) return
+
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            repository.joinCircleByInviteCode(
+            repository.getCircleByInviteCode(
                 inviteCode = currentInviteCode,
-                onSuccess = onSuccess,
+                onSuccess = { circle ->
+                    _uiState.update { it.copy(isLoading = false, isJoinCircleDialogVisible = false) }
+                    if (_uiState.value.autoAcceptInvites) {
+                        confirmJoinCircle(circle.id, onSuccess)
+                    } else {
+                        _uiState.update { it.copy(previewCircle = circle, showJoinPreview = true) }
+                    }
+                },
                 onNotFound = {
-                    _uiState.update { it.copy(errorMessage = "Circle not found: $currentInviteCode") }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Circle not found: $currentInviteCode") }
                 },
                 onError = { e ->
-                    _uiState.update { it.copy(errorMessage = "Error joining circle: ${e.message}") }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Error: ${e.message}") }
                 }
             )
-            _uiState.update { it.copy(isJoinCircleDialogVisible = false, joinInviteCode = "") }
         }
+    }
+
+    fun confirmJoinCircle(circleId: String, onSuccess: (String) -> Unit) {
+        viewModelScope.launch {
+            repository.addMemberByUid(
+                circleId = circleId,
+                uid = repository.getCurrentUserUid() ?: return@launch,
+                onSuccess = {
+                    _uiState.update { it.copy(showJoinPreview = false, previewCircle = null, joinInviteCode = "") }
+                    onSuccess(circleId)
+                },
+                onError = { e ->
+                    _uiState.update { it.copy(errorMessage = "Error joining: ${e.message}") }
+                }
+            )
+        }
+    }
+
+    fun cancelJoin() {
+        _uiState.update { it.copy(showJoinPreview = false, previewCircle = null, joinInviteCode = "") }
     }
 
     fun clearErrorMessage() {

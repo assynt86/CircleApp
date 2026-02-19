@@ -22,6 +22,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -49,13 +52,15 @@ import com.example.circleapp.R
 import com.example.circleapp.ui.theme.LeagueSpartan
 import com.example.circleapp.ui.viewmodels.HomeUiState
 import com.example.circleapp.ui.viewmodels.HomeViewModel
+import com.example.circleapp.data.Circle
 
 @Composable
 fun HomeView(
     homeViewModel: HomeViewModel = viewModel(),
     onCircleClick: (String) -> Unit,
     onJoinCircle: (String) -> Unit,
-    onCreateCircle: (String) -> Unit
+    onCreateCircle: (String) -> Unit,
+    onInvitesClick: () -> Unit
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -72,18 +77,19 @@ fun HomeView(
         HomeViewContent(
             uiState = uiState,
             onCircleClick = onCircleClick,
-            onJoinCircle = { homeViewModel.joinCircle(onSuccess = onJoinCircle) },
+            onJoinCircle = { homeViewModel.onJoinClick(onSuccess = onJoinCircle) },
             onCreateCircle = { homeViewModel.createCircle(onSuccess = onCreateCircle) },
             onShowCreateCircleDialog = { homeViewModel.showCreateCircleDialog(it) },
             onShowJoinCircleDialog = { homeViewModel.showJoinCircleDialog(it) },
             onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
             onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
-            onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) }
+            onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) },
+            onInvitesClick = onInvitesClick
         )
 
         // Full screen loading overlay
         AnimatedVisibility(
-            visible = uiState.isLoading,
+            visible = uiState.isLoading && uiState.circles.isEmpty(),
             enter = fadeIn(),
             exit = fadeOut()
         ) {
@@ -111,6 +117,14 @@ fun HomeView(
                 }
             }
         }
+
+        if (uiState.showJoinPreview && uiState.previewCircle != null) {
+            JoinPreviewDialog(
+                circle = uiState.previewCircle!!,
+                onDismiss = { homeViewModel.cancelJoin() },
+                onConfirm = { homeViewModel.confirmJoinCircle(uiState.previewCircle!!.id, onJoinCircle) }
+            )
+        }
     }
 }
 
@@ -125,7 +139,8 @@ fun HomeViewContent(
     onShowJoinCircleDialog: (Boolean) -> Unit,
     onNewCircleNameChange: (String) -> Unit,
     onNewCircleDurationChange: (Float) -> Unit,
-    onInviteCodeChange: (String) -> Unit
+    onInviteCodeChange: (String) -> Unit,
+    onInvitesClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -148,6 +163,15 @@ fun HomeViewContent(
                         modifier = Modifier.fillMaxHeight(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (uiState.pendingInvitesCount > 0) {
+                            IconButton(onClick = onInvitesClick) {
+                                BadgedBox(badge = {
+                                    Badge { Text(uiState.pendingInvitesCount.toString()) }
+                                }) {
+                                    Icon(Icons.Filled.Notifications, contentDescription = "Pending Invites")
+                                }
+                            }
+                        }
                         IconButton(onClick = { onShowJoinCircleDialog(true) }) {
                             Icon(Icons.Filled.GroupAdd, contentDescription = "Join Circle")
                         }
@@ -380,7 +404,7 @@ fun HomeViewContent(
                     BasicTextField(
                         value = uiState.joinInviteCode,
                         onValueChange = onInviteCodeChange,
-                        decorationBox = { _ ->
+                        decorationBox = { innerTextField ->
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 for (index in 0 until 6) {
                                     val char = uiState.joinInviteCode.getOrNull(index)
@@ -422,5 +446,90 @@ fun HomeViewContent(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun JoinPreviewDialog(
+    circle: Circle,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(28.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Join Circle?",
+                    fontFamily = LeagueSpartan,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .clip(CircleShape)
+                        .background(Color.LightGray)
+                ) {
+                    if (circle.backgroundUrl != null) {
+                        AsyncImage(
+                            model = circle.backgroundUrl,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.Group,
+                            contentDescription = null,
+                            modifier = Modifier.size(80.dp).align(Alignment.Center),
+                            tint = Color.White
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = circle.name,
+                    fontFamily = LeagueSpartan,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Cancel", fontFamily = LeagueSpartan)
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
+                    ) {
+                        Text("Join", fontFamily = LeagueSpartan)
+                    }
+                }
+            }
+        }
     }
 }

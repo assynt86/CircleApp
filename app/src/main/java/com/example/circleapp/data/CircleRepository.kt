@@ -9,6 +9,9 @@ import android.net.Uri
 import com.example.circleapp.data.CircleInfo
 import com.example.circleapp.data.PhotoItem
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 class CircleRepository {
 
@@ -100,6 +103,27 @@ class CircleRepository {
                     .addOnFailureListener { e -> onError(e) }
             }
             .addOnFailureListener { e -> onError(e) }
+    }
+
+    fun getCircleByInviteCode(
+        inviteCode: String,
+        onSuccess: (Circle) -> Unit,
+        onNotFound: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles")
+            .whereEqualTo("inviteCode", inviteCode.trim())
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snap ->
+                if (snap.isEmpty) {
+                    onNotFound()
+                } else {
+                    val circle = snap.documents.first().toObject(Circle::class.java)
+                    if (circle != null) onSuccess(circle) else onNotFound()
+                }
+            }
+            .addOnFailureListener { onError(it) }
     }
 
     /**
@@ -387,13 +411,98 @@ class CircleRepository {
                 }
 
                 val userUid = snap.documents.first().id
-                db.collection("circles")
-                    .document(circleId)
-                    .update("members", FieldValue.arrayUnion(userUid))
-                    .addOnSuccessListener { onSuccess() }
-                    .addOnFailureListener { onError(it) }
+                addMemberByUid(circleId, userUid, onSuccess, onError)
             }
             .addOnFailureListener { onError(it) }
+    }
+
+    fun addMemberByUid(
+        circleId: String,
+        uid: String,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles")
+            .document(circleId)
+            .update("members", FieldValue.arrayUnion(uid))
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
+    }
+
+    fun addMembersByUids(
+        circleId: String,
+        uids: List<String>,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        if (uids.isEmpty()) {
+            onSuccess()
+            return
+        }
+        db.collection("circles")
+            .document(circleId)
+            .update("members", FieldValue.arrayUnion(*uids.toTypedArray()))
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
+    }
+
+    fun sendCircleInvite(
+        circleId: String,
+        circleName: String,
+        circleBackgroundUrl: String?,
+        inviterUid: String,
+        inviterName: String,
+        targetUser: UserProfile,
+        isFriend: Boolean,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        if (isFriend || targetUser.autoAcceptInvites) {
+            addMemberByUid(circleId, targetUser.uid, onSuccess, onError)
+        } else {
+            val inviteData = hashMapOf(
+                "circleId" to circleId,
+                "circleName" to circleName,
+                "circleBackgroundUrl" to circleBackgroundUrl,
+                "inviteeUid" to targetUser.uid,
+                "inviterUid" to inviterUid,
+                "inviterName" to inviterName,
+                "status" to "pending",
+                "timestamp" to FieldValue.serverTimestamp()
+            )
+            db.collection("circle_invites").add(inviteData)
+                .addOnSuccessListener { onSuccess() }
+                .addOnFailureListener { onError(it) }
+        }
+    }
+
+    fun listenToCircleInvites(): Flow<List<CircleInvite>> = callbackFlow {
+        val uid = auth.currentUser?.uid ?: return@callbackFlow
+        val listener = db.collection("circle_invites")
+            .whereEqualTo("inviteeUid", uid)
+            .whereEqualTo("status", "pending")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val invites = snapshot.toObjects(CircleInvite::class.java)
+                    trySend(invites)
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun respondToCircleInvite(inviteId: String, circleId: String, inviteeUid: String, accept: Boolean, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        if (accept) {
+            val batch = db.batch()
+            batch.update(db.collection("circle_invites").document(inviteId), "status", "accepted")
+            batch.update(db.collection("circles").document(circleId), "members", FieldValue.arrayUnion(inviteeUid))
+            batch.commit()
+                .addOnSuccessListener { onSuccess() }
+                .addOnFailureListener { onError(it) }
+        } else {
+            db.collection("circle_invites").document(inviteId).update("status", "declined")
+                .addOnSuccessListener { onSuccess() }
+                .addOnFailureListener { onError(it) }
+        }
     }
 
     /**

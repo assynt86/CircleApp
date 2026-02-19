@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -28,11 +30,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.circleapp.ui.theme.LeagueSpartan
 import com.example.circleapp.ui.viewmodels.ProfileViewModel
+import com.example.circleapp.data.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileView(
     onLogout: () -> Unit,
+    onFriendsClick: () -> Unit,
     profileViewModel: ProfileViewModel = viewModel()
 ){
     val uiState by profileViewModel.uiState.collectAsState()
@@ -94,6 +98,20 @@ fun ProfileView(
                     }
                     
                     HorizontalDivider()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Auto-accept circle invites", fontFamily = LeagueSpartan)
+                        Switch(
+                            checked = uiState.autoAcceptInvites,
+                            onCheckedChange = { profileViewModel.setAutoAcceptInvites(it) }
+                        )
+                    }
+
+                    HorizontalDivider()
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -120,6 +138,27 @@ fun ProfileView(
                             onCheckedChange = { if (!uiState.useSystemTheme) profileViewModel.setDarkMode(it) },
                             enabled = !uiState.useSystemTheme
                         )
+                    }
+
+                    HorizontalDivider()
+
+                    Text("Blocked Accounts", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold)
+                    if (uiState.blockedUsers.isEmpty()) {
+                        Text("No blocked accounts", fontFamily = LeagueSpartan, color = Color.Gray, fontSize = 14.sp)
+                    } else {
+                        LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                            items(uiState.blockedUsers) { blockedUser ->
+                                ListItem(
+                                    headlineContent = { Text(blockedUser.username, fontFamily = LeagueSpartan, fontSize = 16.sp) },
+                                    trailingContent = {
+                                        TextButton(onClick = { profileViewModel.unblockUser(blockedUser.uid) }) {
+                                            Text("Unblock", fontFamily = LeagueSpartan, fontSize = 14.sp)
+                                        }
+                                    },
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -279,7 +318,7 @@ fun ProfileView(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Button(
-                        onClick = { /* TODO: Implement Friends screen navigation */ },
+                        onClick = onFriendsClick,
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = MaterialTheme.shapes.medium
                     ) {
@@ -331,6 +370,7 @@ fun InfoLabel(label: String, value: String) {
             fontWeight = FontWeight.Bold,
             fontSize = 22.sp
         )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = value,
             fontFamily = LeagueSpartan,
@@ -351,6 +391,7 @@ fun EditableInfoLabel(label: String, value: String, onEditClick: () -> Unit) {
             fontWeight = FontWeight.Bold,
             fontSize = 22.sp
         )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = value,
             fontFamily = LeagueSpartan,
@@ -384,6 +425,7 @@ fun CensoredInfoLabel(
             fontWeight = FontWeight.Bold,
             fontSize = 22.sp
         )
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = if (isVisible) value else "•".repeat(value.length.coerceAtLeast(8)),
             fontFamily = LeagueSpartan,

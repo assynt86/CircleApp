@@ -8,21 +8,28 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.circleapp.data.CircleInfo
 import com.example.circleapp.data.CircleRepository
+import com.example.circleapp.data.FriendsRepository
 import com.example.circleapp.data.UserProfile
+import com.example.circleapp.data.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class CircleSettingsUiState(
     val circleInfo: CircleInfo? = null,
     val members: List<UserProfile> = emptyList(),
+    val friends: List<UserProfile> = emptyList(),
+    val selectedFriendUids: Set<String> = emptySet(),
     val isAdmin: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null,
-    val showDeleteConfirmation: Boolean = false
+    val showDeleteConfirmation: Boolean = false,
+    val showLeaveConfirmation: Boolean = false,
+    val currentUserName: String = ""
 )
 
 class CircleSettingsViewModel(
@@ -31,11 +38,22 @@ class CircleSettingsViewModel(
 ) : AndroidViewModel(application) {
 
     private val repository = CircleRepository()
+    private val friendsRepository = FriendsRepository()
+    private val userRepository = UserRepository()
     private val _uiState = MutableStateFlow(CircleSettingsUiState())
     val uiState: StateFlow<CircleSettingsUiState> = _uiState.asStateFlow()
 
     init {
         loadCircleData()
+        loadFriends()
+        loadCurrentUser()
+    }
+
+    private fun loadCurrentUser() {
+        viewModelScope.launch {
+            val user = userRepository.getCurrentUser()
+            _uiState.update { it.copy(currentUserName = user?.displayName ?: user?.username ?: "Someone") }
+        }
     }
 
     private fun loadCircleData() {
@@ -57,13 +75,6 @@ class CircleSettingsViewModel(
     }
 
     private fun loadMembers() {
-        // We need the list of members from the circle document. 
-        // listenToCircle currently doesn't return the members list.
-        // Let's get the full circle document once to get member UIDs.
-        // Actually, let's update repository or use another way.
-        // For now, I'll assume repository.getCircleMembers needs memberUids.
-        
-        // I will use a simple get to fetch circle members
         com.google.firebase.firestore.FirebaseFirestore.getInstance()
             .collection("circles").document(circleId)
             .get()
@@ -81,6 +92,27 @@ class CircleSettingsViewModel(
             .addOnFailureListener { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
+    }
+
+    private fun loadFriends() {
+        viewModelScope.launch {
+            friendsRepository.listenToFriends().collectLatest { friendUids ->
+                friendsRepository.getUsers(friendUids, { friends ->
+                    _uiState.update { it.copy(friends = friends) }
+                }, {})
+            }
+        }
+    }
+
+    fun toggleFriendSelection(uid: String) {
+        _uiState.update { state ->
+            val newSelection = if (state.selectedFriendUids.contains(uid)) {
+                state.selectedFriendUids - uid
+            } else {
+                state.selectedFriendUids + uid
+            }
+            state.copy(selectedFriendUids = newSelection)
+        }
     }
 
     fun updateCircleName(newName: String) {
@@ -108,21 +140,80 @@ class CircleSettingsViewModel(
         )
     }
 
-    fun addMember(username: String) {
-        if (username.isBlank()) return
+    fun addMembers(typedUsername: String) {
+        val selectedUids = _uiState.value.selectedFriendUids.toList()
+        if (typedUsername.isBlank() && selectedUids.isEmpty()) return
+
         _uiState.update { it.copy(isLoading = true) }
-        repository.addMemberByUsername(circleId, username,
-            onSuccess = {
-                _uiState.update { it.copy(isLoading = false, successMessage = "Member added") }
-                loadMembers()
-            },
-            onNotFound = {
-                _uiState.update { it.copy(isLoading = false, error = "User not found") }
-            },
-            onError = { e ->
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+        
+        viewModelScope.launch {
+            val currentUid = repository.getCurrentUserUid() ?: return@launch
+            val circleInfo = _uiState.value.circleInfo ?: return@launch
+
+            // 1. Invite selected friends (Direct add because they are friends)
+            if (selectedUids.isNotEmpty()) {
+                repository.addMembersByUids(circleId, selectedUids,
+                    onSuccess = {
+                        // Friends added, now handle typed username
+                        handleTypedUsername(typedUsername, currentUid, circleInfo)
+                    },
+                    onError = { e ->
+                        finalizeAdd(true, e.message)
+                    }
+                )
+            } else {
+                handleTypedUsername(typedUsername, currentUid, circleInfo)
             }
-        )
+        }
+    }
+
+    private fun handleTypedUsername(typedUsername: String, currentUid: String, circleInfo: CircleInfo) {
+        if (typedUsername.isNotBlank()) {
+            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("users")
+                .whereEqualTo("username", typedUsername.trim())
+                .limit(1)
+                .get()
+                .addOnSuccessListener { snap ->
+                    if (snap.isEmpty) {
+                        finalizeAdd(true, "User '$typedUsername' not found")
+                        return@addOnSuccessListener
+                    }
+
+                    val targetUser = snap.documents.first().toObject(UserProfile::class.java)
+                    if (targetUser == null) {
+                        finalizeAdd(true, "Error loading user")
+                        return@addOnSuccessListener
+                    }
+
+                    val isFriend = _uiState.value.friends.any { it.uid == targetUser.uid }
+                    
+                    repository.sendCircleInvite(
+                        circleId = circleId,
+                        circleName = circleInfo.name,
+                        circleBackgroundUrl = circleInfo.backgroundUrl,
+                        inviterUid = currentUid,
+                        inviterName = _uiState.value.currentUserName,
+                        targetUser = targetUser,
+                        isFriend = isFriend,
+                        onSuccess = { finalizeAdd(false, null) },
+                        onError = { e -> finalizeAdd(true, e.message) }
+                    )
+                }
+                .addOnFailureListener { e -> finalizeAdd(true, e.message) }
+        } else {
+            finalizeAdd(false, null)
+        }
+    }
+
+    private fun finalizeAdd(error: Boolean, message: String?) {
+        _uiState.update { it.copy(
+            isLoading = false, 
+            error = if (error) message else null,
+            successMessage = if (!error) "Invitations sent / Members added" else null,
+            selectedFriendUids = emptySet()
+        ) }
+        loadMembers()
     }
 
     fun kickMember(memberUid: String) {
@@ -131,6 +222,20 @@ class CircleSettingsViewModel(
             onSuccess = {
                 _uiState.update { it.copy(isLoading = false, successMessage = "Member removed") }
                 loadMembers()
+            },
+            onError = { e ->
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
+        )
+    }
+
+    fun leaveCircle(onSuccess: () -> Unit) {
+        val currentUid = repository.getCurrentUserUid() ?: return
+        _uiState.update { it.copy(isLoading = true) }
+        repository.kickMember(circleId, currentUid,
+            onSuccess = {
+                _uiState.update { it.copy(isLoading = false) }
+                onSuccess()
             },
             onError = { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
@@ -152,6 +257,10 @@ class CircleSettingsViewModel(
 
     fun setShowDeleteConfirmation(show: Boolean) {
         _uiState.update { it.copy(showDeleteConfirmation = show) }
+    }
+
+    fun setShowLeaveConfirmation(show: Boolean) {
+        _uiState.update { it.copy(showLeaveConfirmation = show) }
     }
 
     fun clearMessages() {

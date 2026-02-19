@@ -1,5 +1,6 @@
 package com.example.circleapp.ui.views
 
+import android.app.Application
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -37,8 +38,9 @@ fun CircleSettingsView(
     onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
+    val application = context.applicationContext as Application
     val viewModel: CircleSettingsViewModel = viewModel(
-        factory = CircleSettingsViewModelFactory(getApplication(), circleId)
+        factory = CircleSettingsViewModelFactory(application, circleId)
     )
     val uiState by viewModel.uiState.collectAsState()
 
@@ -219,9 +221,9 @@ fun CircleSettingsView(
                 }
             }
 
-            // Admin Actions
+            // Actions
+            Spacer(Modifier.height(16.dp))
             if (uiState.isAdmin) {
-                Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { viewModel.setShowDeleteConfirmation(true) },
                     modifier = Modifier.fillMaxWidth(),
@@ -231,6 +233,17 @@ fun CircleSettingsView(
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Delete Circle", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = { viewModel.setShowLeaveConfirmation(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(Icons.Default.ExitToApp, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Leave Circle", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -263,17 +276,57 @@ fun CircleSettingsView(
     if (showAddMemberDialog) {
         AlertDialog(
             onDismissRequest = { showAddMemberDialog = false },
-            title = { Text("Add Member", fontFamily = LeagueSpartan) },
+            title = { Text("Add Members", fontFamily = LeagueSpartan) },
             text = {
-                OutlinedTextField(
-                    value = memberUsernameToAdd,
-                    onValueChange = { memberUsernameToAdd = it },
-                    label = { Text("Username") }
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = memberUsernameToAdd,
+                        onValueChange = { memberUsernameToAdd = it },
+                        label = { Text("Add by Username") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text("Or select from Friends:", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+                    if (uiState.friends.isEmpty()) {
+                        Text("No friends to show", fontFamily = LeagueSpartan, color = Color.Gray, fontSize = 12.sp)
+                    } else {
+                        LazyColumn(modifier = Modifier.heightIn(max = 240.dp)) {
+                            items(uiState.friends) { friend ->
+                                val isSelected = uiState.selectedFriendUids.contains(friend.uid)
+                                val isAlreadyMember = uiState.members.any { it.uid == friend.uid }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = !isAlreadyMember) { viewModel.toggleFriendSelection(friend.uid) }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected || isAlreadyMember,
+                                        onCheckedChange = { if (!isAlreadyMember) viewModel.toggleFriendSelection(friend.uid) },
+                                        enabled = !isAlreadyMember
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = friend.username,
+                                        fontFamily = LeagueSpartan,
+                                        color = if (isAlreadyMember) Color.Gray else Color.Unspecified
+                                    )
+                                    if (isAlreadyMember) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("(In Circle)", fontFamily = LeagueSpartan, fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.addMember(memberUsernameToAdd)
+                    viewModel.addMembers(memberUsernameToAdd)
                     showAddMemberDialog = false
                     memberUsernameToAdd = ""
                 }) { Text("Add") }
@@ -297,6 +350,23 @@ fun CircleSettingsView(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.setShowDeleteConfirmation(false) }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (uiState.showLeaveConfirmation) {
+        AlertDialog(
+            onDismissRequest = { viewModel.setShowLeaveConfirmation(false) },
+            title = { Text("Leave Circle?", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to leave this circle? You will need an invite to join again.") },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.leaveCircle(onDeleted) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                ) { Text("Leave") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.setShowLeaveConfirmation(false) }) { Text("Cancel") }
             }
         )
     }

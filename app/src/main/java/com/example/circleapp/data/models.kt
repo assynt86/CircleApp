@@ -107,5 +107,18 @@ data class UserProfile(
     val phone: String = "",
     val displayName: String = "",
     val photoUrl: String = "",
-    val createdAt: Timestamp? = null
+    val createdAt: Timestamp? = null,
+    val autoAcceptInvites: Boolean = false
+)
+
+data class CircleInvite(
+    @DocumentId val id: String = "",
+    val circleId: String = "",
+    val circleName: String = "",
+    val circleBackgroundUrl: String? = null,
+    val inviteeUid: String = "",
+    val inviterUid: String = "",
+    val inviterName: String = "",
+    val status: String = "pending",
+    val timestamp: Timestamp? = null
 )

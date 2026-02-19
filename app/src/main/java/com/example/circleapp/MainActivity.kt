@@ -25,6 +25,7 @@ import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
 import com.example.circleapp.ui.views.ProfileView
 import com.example.circleapp.ui.views.CircleSettingsView
+import com.example.circleapp.ui.views.FriendsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.views.AuthView
@@ -142,12 +143,18 @@ fun AppNavigation() {
                         },
                         onCreateCircle = { newCircleId ->
                             navController.navigate("circle/$newCircleId")
+                        },
+                        onInvitesClick = {
+                            navController.navigate("friends?tab=2")
                         }
                     )
 
                     2 -> ProfileView(
                         onLogout = {
                             auth.signOut()
+                        },
+                        onFriendsClick = {
+                            navController.navigate("friends")
                         }
                     )
                 }
@@ -191,6 +198,23 @@ fun AppNavigation() {
                     }
                 )
             }
+        }
+
+        // -------- Friends --------
+        composable(
+            route = "friends?tab={tab}",
+            arguments = listOf(
+                navArgument("tab") {
+                    type = NavType.IntType
+                    defaultValue = 0
+                }
+            )
+        ) { backStackEntry ->
+            val initialTab = backStackEntry.arguments?.getInt("tab") ?: 0
+            FriendsView(
+                onBack = { navController.popBackStack() },
+                initialTab = initialTab
+            )
         }
     }
 }

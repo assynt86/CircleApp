@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.circleapp.data.Circle
 import com.example.circleapp.data.CircleInfo
 import com.example.circleapp.data.CircleRepository
+import com.example.circleapp.data.FriendsRepository
 import com.example.circleapp.data.PhotoItem
 import com.example.circleapp.data.SavedPhotosStore
 import com.example.circleapp.data.saveJpegToGallery
@@ -16,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -24,6 +26,8 @@ import kotlinx.coroutines.tasks.await
 data class CircleUiState(
     val circleInfo: CircleInfo? = null,
     val photos: List<PhotoItem> = emptyList(),
+    val allPhotos: List<PhotoItem> = emptyList(), // Store unfiltered photos
+    val blockedUserUids: List<String> = emptyList(),
     val userCircles: List<Circle> = emptyList(),
     val error: String? = null,
     val isUploading: Boolean = false,
@@ -42,6 +46,7 @@ data class CircleUiState(
 class CircleViewModel(application: Application, private val circleId: String) : AndroidViewModel(application) {
 
     private val repository = CircleRepository()
+    private val friendsRepository = FriendsRepository()
     private val savedPhotosStore = SavedPhotosStore(application)
 
     private val _uiState = MutableStateFlow(CircleUiState())
@@ -51,6 +56,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         _uiState.update { it.copy(currentUserUid = repository.getCurrentUserUid()) }
         listenToCircle()
         listenToPhotos()
+        listenToBlockedUsers()
         loadUserCircles()
     }
 
@@ -67,12 +73,28 @@ class CircleViewModel(application: Application, private val circleId: String) : 
     private fun listenToPhotos() {
         repository.listenToPhotos(circleId,
             onSuccess = { photoList ->
-                _uiState.update { it.copy(photos = photoList) }
+                _uiState.update { it.copy(allPhotos = photoList) }
+                filterPhotos()
                 fetchDownloadUrls(photoList)
                 autoSaveNewPhotos(photoList)
             },
             onError = { e -> _uiState.update { it.copy(error = e.message) } }
         )
+    }
+
+    private fun listenToBlockedUsers() {
+        viewModelScope.launch {
+            friendsRepository.listenToBlockedUsers().collectLatest { blockedUids ->
+                _uiState.update { it.copy(blockedUserUids = blockedUids) }
+                filterPhotos()
+            }
+        }
+    }
+
+    private fun filterPhotos() {
+        val blocked = _uiState.value.blockedUserUids
+        val filtered = _uiState.value.allPhotos.filter { it.uploaderUid !in blocked }
+        _uiState.update { it.copy(photos = filtered) }
     }
 
     private fun fetchDownloadUrls(photos: List<PhotoItem>) {
@@ -82,10 +104,13 @@ class CircleViewModel(application: Application, private val circleId: String) : 
                     repository.getDownloadUrl(item.storagePath) { url ->
                         if (url != null) {
                             _uiState.update { currentState ->
+                                val updatedAllPhotos = currentState.allPhotos.map {
+                                    if (it.id == item.id) it.copy(downloadUrl = url) else it
+                                }
                                 val updatedPhotos = currentState.photos.map {
                                     if (it.id == item.id) it.copy(downloadUrl = url) else it
                                 }
-                                currentState.copy(photos = updatedPhotos)
+                                currentState.copy(allPhotos = updatedAllPhotos, photos = updatedPhotos)
                             }
                         }
                     }
