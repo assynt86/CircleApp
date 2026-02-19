@@ -1,6 +1,7 @@
 package com.example.circleapp.data
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
@@ -25,5 +26,17 @@ class UserRepository {
 
     suspend fun setAutoAcceptInvites(uid: String, enabled: Boolean) {
         db.collection("users").document(uid).update("autoAcceptInvites", enabled).await()
+    }
+
+    suspend fun reportBug(description: String) {
+        val uid = auth.currentUser?.uid ?: "anonymous"
+        val device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (API ${android.os.Build.VERSION.SDK_INT})"
+        val report = hashMapOf(
+            "userId" to uid,
+            "device" to device,
+            "description" to description,
+            "timestamp" to FieldValue.serverTimestamp()
+        )
+        db.collection("bugs").add(report).await()
     }
 }

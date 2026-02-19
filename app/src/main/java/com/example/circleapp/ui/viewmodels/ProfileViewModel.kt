@@ -30,6 +30,8 @@ data class ProfileUiState(
     val autoAcceptInvites: Boolean = false,
     val showSettingsDialog: Boolean = false,
     val showEditNameDialog: Boolean = false,
+    val showBugReportDialog: Boolean = false,
+    val bugDescription: String = "",
     val isLoading: Boolean = false,
     val error: String? = null,
     val isEmailVisible: Boolean = false,
@@ -184,5 +186,27 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     fun unblockUser(uid: String) {
         friendsRepository.unblockUser(uid, {}, {})
+    }
+
+    fun setShowBugReportDialog(show: Boolean) {
+        _uiState.update { it.copy(showBugReportDialog = show, bugDescription = "") }
+    }
+
+    fun updateBugDescription(description: String) {
+        _uiState.update { it.copy(bugDescription = description) }
+    }
+
+    fun submitBugReport() {
+        val description = _uiState.value.bugDescription
+        if (description.isBlank()) return
+
+        viewModelScope.launch {
+            try {
+                repository.reportBug(description)
+                setShowBugReportDialog(false)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to report bug: ${e.message}") }
+            }
+        }
     }
 }
