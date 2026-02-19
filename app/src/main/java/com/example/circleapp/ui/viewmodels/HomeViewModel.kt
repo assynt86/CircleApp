@@ -44,6 +44,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var initialSelectionDone = false
     private var initialLoadCompleted = false
+    private var pendingEntryPointCircleId: String? = null
+    private var lastHandledEntryPointId: String? = "" // "" means nothing handled yet. null is a valid entry point.
 
     init {
         loadUserCircles()
@@ -56,7 +58,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             repository.getUserCircles(
                 onSuccess = { circleList ->
                     _uiState.update { currentState ->
-                        val selection = if (!initialSelectionDone) {
+                        val selection = if (pendingEntryPointCircleId != null) {
+                            val id = pendingEntryPointCircleId!!
+                            pendingEntryPointCircleId = null // Consume it!
+                            initialSelectionDone = true
+                            listOf(id)
+                        } else if (!initialSelectionDone) {
                             initialSelectionDone = true
                             if (savedSelection.isNotEmpty()) {
                                 // Filter saved selection to only include valid and OPEN circles
@@ -67,6 +74,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                 circleList.filter { !it.isClosed }.map { it.id }
                             }
                         } else {
+                            // If initial selection is already done, preserve current in-memory selection
                             currentState.selectedCircleIds
                         }
                         
@@ -101,31 +109,44 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         
         var completedCount = 0
         circles.forEach { circle ->
-            repository.getFirstPhoto(circle.id, 
-                onSuccess = { photo ->
-                    if (photo != null) {
-                        repository.getDownloadUrl(photo.storagePath) { url ->
-                            if (url != null) {
-                                _uiState.update { state ->
-                                    val updatedCircles = state.circles.map { c ->
-                                        if (c.id == circle.id) c.copy().apply { previewUrl = url } else c
+            // Prioritize custom backgroundUrl if it exists
+            if (!circle.backgroundUrl.isNullOrBlank()) {
+                _uiState.update { state ->
+                    val updatedCircles = state.circles.map { c ->
+                        if (c.id == circle.id) c.copy().apply { previewUrl = circle.backgroundUrl } else c
+                    }
+                    state.copy(circles = updatedCircles)
+                }
+                completedCount++
+                if (completedCount == circles.size) onComplete()
+            } else {
+                // Fallback to the first photo in the circle
+                repository.getFirstPhoto(circle.id, 
+                    onSuccess = { photo ->
+                        if (photo != null) {
+                            repository.getDownloadUrl(photo.storagePath) { url ->
+                                if (url != null) {
+                                    _uiState.update { state ->
+                                        val updatedCircles = state.circles.map { c ->
+                                            if (c.id == circle.id) c.copy().apply { previewUrl = url } else c
+                                        }
+                                        state.copy(circles = updatedCircles)
                                     }
-                                    state.copy(circles = updatedCircles)
                                 }
+                                completedCount++
+                                if (completedCount == circles.size) onComplete()
                             }
+                        } else {
                             completedCount++
                             if (completedCount == circles.size) onComplete()
                         }
-                    } else {
+                    },
+                    onError = { 
                         completedCount++
                         if (completedCount == circles.size) onComplete()
                     }
-                },
-                onError = { 
-                    completedCount++
-                    if (completedCount == circles.size) onComplete()
-                }
-            )
+                )
+            }
         }
     }
 
@@ -245,13 +266,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun handleCameraEntry(entryPointCircleId: String?) {
-        if (entryPointCircleId != null) {
-            val circle = _uiState.value.circles.find { it.id == entryPointCircleId }
-            if (circle != null && !circle.isClosed) {
-                initialSelectionDone = true
+        // Only apply the selection override if it's a DIFFERENT entry point than the one we last handled
+        // This prevents swiping back and forth from resetting manual selections.
+        if (entryPointCircleId != lastHandledEntryPointId) {
+            lastHandledEntryPointId = entryPointCircleId
+            
+            if (entryPointCircleId != null) {
+                // If we enter with a specific circle, we set it as pending
+                // so loadUserCircles (or current state) can use it once.
+                pendingEntryPointCircleId = entryPointCircleId
                 _uiState.update {
                     it.copy(selectedCircleIds = listOf(entryPointCircleId))
                 }
+            } else {
+                // If entering from general navigation (null), we reset any pending state
+                // but we DO NOT reset selectedCircleIds, allowing previous selection to persist.
+                pendingEntryPointCircleId = null
             }
         }
     }

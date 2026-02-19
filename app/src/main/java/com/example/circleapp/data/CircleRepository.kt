@@ -234,7 +234,8 @@ class CircleRepository {
                     val closeAt = snap.getTimestamp("closeAt")
                     val deleteAt = snap.getTimestamp("deleteAt")
                     val ownerUid = snap.getString("ownerUid") ?: ""
-                    onSuccess(CircleInfo(name, invite, status, closeAt, deleteAt, ownerUid))
+                    val backgroundUrl = snap.getString("backgroundUrl")
+                    onSuccess(CircleInfo(name, invite, status, closeAt, deleteAt, ownerUid, backgroundUrl))
                 } else {
                     onError(Exception("Circle not found"))
                 }
@@ -324,6 +325,134 @@ class CircleRepository {
                         onResult(firestoreTask.isSuccessful)
                     }
             }
+    }
+
+    /**
+     * Get details of all members of a circle.
+     */
+    fun getCircleMembers(
+        memberUids: List<String>,
+        onSuccess: (List<UserProfile>) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        if (memberUids.isEmpty()) {
+            onSuccess(emptyList())
+            return
+        }
+
+        db.collection("users")
+            .whereIn("uid", memberUids)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val users = snapshot.toObjects(UserProfile::class.java)
+                onSuccess(users)
+            }
+            .addOnFailureListener { onError(it) }
+    }
+
+    /**
+     * Kick a member from the circle.
+     */
+    fun kickMember(
+        circleId: String,
+        memberUid: String,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles")
+            .document(circleId)
+            .update("members", FieldValue.arrayRemove(memberUid))
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
+    }
+
+    /**
+     * Add a member to the circle by username.
+     */
+    fun addMemberByUsername(
+        circleId: String,
+        username: String,
+        onSuccess: () -> Unit,
+        onNotFound: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("users")
+            .whereEqualTo("username", username.trim())
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snap ->
+                if (snap.isEmpty) {
+                    onNotFound()
+                    return@addOnSuccessListener
+                }
+
+                val userUid = snap.documents.first().id
+                db.collection("circles")
+                    .document(circleId)
+                    .update("members", FieldValue.arrayUnion(userUid))
+                    .addOnSuccessListener { onSuccess() }
+                    .addOnFailureListener { onError(it) }
+            }
+            .addOnFailureListener { onError(it) }
+    }
+
+    /**
+     * Update circle name.
+     */
+    fun updateCircleName(
+        circleId: String,
+        newName: String,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("circles")
+            .document(circleId)
+            .update("name", newName.trim())
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
+    }
+
+    /**
+     * Update circle background photo.
+     */
+    fun updateCircleBackground(
+        circleId: String,
+        photoUri: Uri,
+        onSuccess: (String) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val storagePath = "circles/$circleId/background.jpg"
+        val storageRef = FirebaseStorage.getInstance().reference.child(storagePath)
+
+        storageRef.putFile(photoUri)
+            .addOnSuccessListener {
+                storageRef.downloadUrl.addOnSuccessListener { uri ->
+                    val url = uri.toString()
+                    db.collection("circles")
+                        .document(circleId)
+                        .update("backgroundUrl", url)
+                        .addOnSuccessListener { onSuccess(url) }
+                        .addOnFailureListener { onError(it) }
+                }.addOnFailureListener { onError(it) }
+            }
+            .addOnFailureListener { onError(it) }
+    }
+
+    /**
+     * Delete circle and all its data.
+     */
+    fun deleteCircle(
+        circleId: String,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        // In a real app, you should also delete all photos in storage and subcollections.
+        // For simplicity, we just delete the circle document here.
+        db.collection("circles")
+            .document(circleId)
+            .delete()
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
     }
 
 

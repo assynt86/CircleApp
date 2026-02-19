@@ -35,10 +35,11 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,8 +60,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -75,7 +78,8 @@ import com.example.circleapp.ui.viewmodels.CircleViewModelFactory
 fun CircleView(
     circleId: String,
     onBack: () -> Unit,
-    onCameraClick: (String) -> Unit
+    onCameraClick: (String) -> Unit,
+    onSettingsClick: (String) -> Unit
 ) {
     val application = LocalContext.current.applicationContext as Application
     val factory = remember(circleId) { CircleViewModelFactory(application, circleId) }
@@ -95,6 +99,7 @@ fun CircleView(
         uiState = uiState,
         onBack = onBack,
         onShowCamera = { onCameraClick(circleId) },
+        onSettingsClick = { onSettingsClick(circleId) },
         onSetFullscreenImage = { viewModel.onSetFullscreenImage(it) },
         onUploadPhoto = {
             multiplePhotoPickerLauncher.launch(
@@ -117,6 +122,7 @@ fun CircleViewContent(
     uiState: CircleUiState,
     onBack: () -> Unit,
     onShowCamera: () -> Unit,
+    onSettingsClick: () -> Unit,
     onSetFullscreenImage: (Int?) -> Unit,
     onUploadPhoto: () -> Unit,
     onToggleSelectionMode: () -> Unit,
@@ -128,6 +134,7 @@ fun CircleViewContent(
     onShowInviteDialog: (Boolean) -> Unit
 ) {
     val isClosed = uiState.circleInfo?.isClosed == true
+    val haptic = LocalHapticFeedback.current
 
     Scaffold(
         topBar = {
@@ -154,18 +161,21 @@ fun CircleViewContent(
                             Icon(Icons.Filled.Cancel, contentDescription = "Cancel Selection")
                         }
                     } else {
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        }
                         IconButton(onClick = { onShowInviteDialog(true) }) {
                             Icon(Icons.Filled.GroupAdd, contentDescription = "Invite People")
                         }
-                        IconButton(onClick = onToggleSelectionMode) {
-                            Icon(Icons.Filled.SelectAll, contentDescription = "Select Photos")
+                        IconButton(onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleSelectionMode()
+                        }) {
+                            Icon(Icons.Filled.Checklist, contentDescription = "Select Photos")
                         }
                         if (!isClosed) {
                             IconButton(onClick = onUploadPhoto) {
                                 Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
-                            }
-                            IconButton(onClick = onShowCamera) {
-                                Icon(Icons.Filled.CameraAlt, contentDescription = "Take Photo")
                             }
                         }
                     }
@@ -173,116 +183,142 @@ fun CircleViewContent(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            if (uiState.error != null) {
-                Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
-                return@Column
-            }
-
-            if (uiState.circleInfo == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                    Text("Loading circle...")
-                }
-                return@Column
-            }
-
-            val info = uiState.circleInfo
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
             ) {
-                Text(
-                    text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isClosed) Color.Gray else Color(0xFF4CAF50)
-                )
-
-                if (!isClosed) {
-                    Text(
-                        text = "Closes in: ${uiState.remainingTime}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                } else if (uiState.deleteInTime.isNotEmpty()) {
-                    Text(
-                        text = "Deletes in: ${uiState.deleteInTime}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
+                if (uiState.error != null) {
+                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
+                    return@Column
                 }
-            }
 
-            Spacer(Modifier.height(16.dp))
-            Text("Photos (${uiState.photos.size})", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
+                if (uiState.circleInfo == null) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                        Text("Loading circle...")
+                    }
+                    return@Column
+                }
 
-            if (uiState.isUploading) {
-                CircularProgressIndicator()
-            }
+                val info = uiState.circleInfo
 
-            if (uiState.photos.isEmpty()) {
-                Text("No photos yet.")
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) { itemsIndexed(uiState.photos) { index, p ->
-                        val isSelected = uiState.selectedPhotos.contains(p.id)
-                        Card(modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = {
-                                    if (uiState.inSelectionMode) {
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isClosed) Color.Gray else Color(0xFF4CAF50)
+                    )
+
+                    if (!isClosed) {
+                        Text(
+                            text = "Closes in: ${uiState.remainingTime}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else if (uiState.deleteInTime.isNotEmpty()) {
+                        Text(
+                            text = "Deletes in: ${uiState.deleteInTime}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text("Photos (${uiState.photos.size})", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
+
+                if (uiState.isUploading) {
+                    CircularProgressIndicator()
+                }
+
+                if (uiState.photos.isEmpty()) {
+                    Text("No photos yet.")
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) { itemsIndexed(uiState.photos) { index, p ->
+                            val isSelected = uiState.selectedPhotos.contains(p.id)
+                            Card(modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = {
+                                        if (uiState.inSelectionMode) {
+                                            onTogglePhotoSelection(p.id)
+                                        } else {
+                                            onSetFullscreenImage(index)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (!uiState.inSelectionMode) {
+                                            onToggleSelectionMode()
+                                        }
                                         onTogglePhotoSelection(p.id)
-                                    } else {
-                                        onSetFullscreenImage(index)
                                     }
-                                },
-                                onLongClick = {
-                                    if (!uiState.inSelectionMode) {
-                                        onToggleSelectionMode()
-                                    }
-                                    onTogglePhotoSelection(p.id)
-                                }
-                            )
-                            .border(
-                                width = if (isSelected) 4.dp else 0.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-                            )
-                        ) {
-                            Box(contentAlignment = Alignment.TopEnd) {
-                                AsyncImage(
-                                    model = p.downloadUrl,
-                                    contentDescription = "Circle photo",
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(1f)
-                                        .clip(MaterialTheme.shapes.medium),
-                                    contentScale = ContentScale.Crop
                                 )
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = "Selected",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(8.dp)
+                                .border(
+                                    width = if (isSelected) 4.dp else 0.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+                                )
+                            ) {
+                                Box(contentAlignment = Alignment.TopEnd) {
+                                    AsyncImage(
+                                        model = p.downloadUrl,
+                                        contentDescription = "Circle photo",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(1f)
+                                            .clip(MaterialTheme.shapes.medium),
+                                        contentScale = ContentScale.Crop
                                     )
-                                }
-                                if (uiState.inProgressSaves.contains(p.id)) {
-                                    CircularProgressIndicator(modifier = Modifier.padding(4.dp))
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Filled.CheckCircle,
+                                            contentDescription = "Selected",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(8.dp)
+                                        )
+                                    }
+                                    if (uiState.inProgressSaves.contains(p.id)) {
+                                        CircularProgressIndicator(modifier = Modifier.padding(4.dp))
+                                    }
                                 }
                             }
                         }
                     }
+                }
+            }
+
+            // Floating Camera Button at bottom middle - Neutral styling (no purple)
+            if (!isClosed && !uiState.inSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp)
+                        .size(100.dp)
+                        .border(4.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                        .padding(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable { onShowCamera() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CameraAlt,
+                        contentDescription = "Take Photo",
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -293,8 +329,8 @@ fun CircleViewContent(
             onDismissRequest = { onShowInviteDialog(false) },
             title = { Text("Invite to ${uiState.circleInfo?.name}") },
             text = {
+                val inviteCode = uiState.circleInfo!!.inviteCode
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    val inviteCode = uiState.circleInfo!!.inviteCode
                     val bitmap = remember(inviteCode) {
                         generateQRCode(inviteCode)
                     }

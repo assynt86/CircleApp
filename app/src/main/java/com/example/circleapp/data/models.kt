@@ -16,6 +16,7 @@ data class Circle(
     val deleteAt: Timestamp? = null,
     val cleanedUp: Boolean = false,
     val status: String = "open",
+    val backgroundUrl: String? = null,
     @get:Exclude var previewUrl: String? = null
 ) {
     @get:Exclude
@@ -72,7 +73,8 @@ data class CircleInfo(
     val status: String,
     val closeAt: Timestamp?,
     val deleteAt: Timestamp? = null,
-    val ownerUid: String
+    val ownerUid: String,
+    val backgroundUrl: String? = null
 ) {
     val isClosed: Boolean
         get() {

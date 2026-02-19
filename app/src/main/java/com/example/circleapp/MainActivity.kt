@@ -24,6 +24,7 @@ import com.example.circleapp.ui.views.CameraView
 import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
 import com.example.circleapp.ui.views.ProfileView
+import com.example.circleapp.ui.views.CircleSettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.views.AuthView
@@ -165,6 +166,28 @@ fun AppNavigation() {
                     onBack = { navController.popBackStack() },
                     onCameraClick = { currentCircleId ->
                         navController.navigate("main?startPage=0&circleId=$currentCircleId")
+                    },
+                    onSettingsClick = { currentCircleId ->
+                        navController.navigate("circle_settings/$currentCircleId")
+                    }
+                )
+            }
+        }
+
+        // -------- Circle Settings --------
+        composable(
+            route = "circle_settings/{circleId}",
+            arguments = listOf(navArgument("circleId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val circleId = backStackEntry.arguments?.getString("circleId")
+            if (circleId != null) {
+                CircleSettingsView(
+                    circleId = circleId,
+                    onBack = { navController.popBackStack() },
+                    onDeleted = {
+                        navController.navigate("main?startPage=1") {
+                            popUpTo("main") { inclusive = true }
+                        }
                     }
                 )
             }
