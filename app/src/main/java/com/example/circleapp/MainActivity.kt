@@ -26,6 +26,7 @@ import com.example.circleapp.ui.views.HomeView
 import com.example.circleapp.ui.views.ProfileView
 import com.example.circleapp.ui.views.CircleSettingsView
 import com.example.circleapp.ui.views.FriendsView
+import com.example.circleapp.ui.views.SettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.views.AuthView
@@ -155,6 +156,9 @@ fun AppNavigation() {
                         },
                         onFriendsClick = {
                             navController.navigate("friends")
+                        },
+                        onSettingsClick = {
+                            navController.navigate("settings")
                         }
                     )
                 }
@@ -215,6 +219,11 @@ fun AppNavigation() {
                 onBack = { navController.popBackStack() },
                 initialTab = initialTab
             )
+        }
+
+        // -------- Settings --------
+        composable("settings") {
+            SettingsView(onBack = { navController.popBackStack() })
         }
     }
 }

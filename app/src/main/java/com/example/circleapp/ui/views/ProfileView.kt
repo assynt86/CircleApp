@@ -37,6 +37,7 @@ import com.example.circleapp.data.UserProfile
 fun ProfileView(
     onLogout: () -> Unit,
     onFriendsClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     profileViewModel: ProfileViewModel = viewModel()
 ){
     val uiState by profileViewModel.uiState.collectAsState()
@@ -77,97 +78,6 @@ fun ProfileView(
                 )
             }
         }
-    }
-
-    if (uiState.showSettingsDialog) {
-        AlertDialog(
-            onDismissRequest = { profileViewModel.setShowSettingsDialog(false) },
-            title = { Text("Settings", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Auto-save photos to gallery", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.isAutoSaveEnabled,
-                            onCheckedChange = { profileViewModel.toggleAutoSave(it) }
-                        )
-                    }
-                    
-                    HorizontalDivider()
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Auto-accept circle invites", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.autoAcceptInvites,
-                            onCheckedChange = { profileViewModel.setAutoAcceptInvites(it) }
-                        )
-                    }
-
-                    HorizontalDivider()
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Use System Theme", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.useSystemTheme,
-                            onCheckedChange = { profileViewModel.setUseSystemTheme(it) }
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .alpha(if (uiState.useSystemTheme) 0.5f else 1.0f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Dark Mode", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.isDarkMode,
-                            onCheckedChange = { if (!uiState.useSystemTheme) profileViewModel.setDarkMode(it) },
-                            enabled = !uiState.useSystemTheme
-                        )
-                    }
-
-                    HorizontalDivider()
-
-                    Text("Blocked Accounts", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold)
-                    if (uiState.blockedUsers.isEmpty()) {
-                        Text("No blocked accounts", fontFamily = LeagueSpartan, color = Color.Gray, fontSize = 14.sp)
-                    } else {
-                        LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                            items(uiState.blockedUsers) { blockedUser ->
-                                ListItem(
-                                    headlineContent = { Text(blockedUser.username, fontFamily = LeagueSpartan, fontSize = 16.sp) },
-                                    trailingContent = {
-                                        TextButton(onClick = { profileViewModel.unblockUser(blockedUser.uid) }) {
-                                            Text("Unblock", fontFamily = LeagueSpartan, fontSize = 14.sp)
-                                        }
-                                    },
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { profileViewModel.setShowSettingsDialog(false) }) {
-                    Text("Close", fontFamily = LeagueSpartan)
-                }
-            }
-        )
     }
 
     if (uiState.showEditNameDialog) {
@@ -328,7 +238,7 @@ fun ProfileView(
                     }
                     
                     Button(
-                        onClick = { profileViewModel.setShowSettingsDialog(true) },
+                        onClick = onSettingsClick,
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = MaterialTheme.shapes.medium,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)

@@ -4,16 +4,11 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.circleapp.data.FriendsRepository
-import com.example.circleapp.data.SavedPhotosStore
-import com.example.circleapp.data.ThemePreferences
-import com.example.circleapp.data.UserProfile
 import com.example.circleapp.data.UserRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -24,25 +19,16 @@ data class ProfileUiState(
     val email: String = "",
     val phone: String = "",
     val photoUrl: String = "",
-    val isAutoSaveEnabled: Boolean = false,
-    val useSystemTheme: Boolean = true,
-    val isDarkMode: Boolean = true,
-    val autoAcceptInvites: Boolean = false,
-    val showSettingsDialog: Boolean = false,
     val showEditNameDialog: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val isEmailVisible: Boolean = false,
     val isPhoneVisible: Boolean = false,
-    val editedName: String = "",
-    val blockedUsers: List<UserProfile> = emptyList()
+    val editedName: String = ""
 )
 
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = UserRepository()
-    private val friendsRepository = FriendsRepository()
-    private val savedPhotosStore = SavedPhotosStore(application)
-    private val themePreferences = ThemePreferences(application)
     private val auth = FirebaseAuth.getInstance()
     private val storage = FirebaseStorage.getInstance()
 
@@ -51,28 +37,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         loadCurrentUser()
-        viewModelScope.launch {
-            savedPhotosStore.autoSaveFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(isAutoSaveEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            themePreferences.useSystemThemeFlow.collectLatest { useSystem ->
-                _uiState.update { it.copy(useSystemTheme = useSystem) }
-            }
-        }
-        viewModelScope.launch {
-            themePreferences.isDarkModeFlow.collectLatest { isDark ->
-                _uiState.update { it.copy(isDarkMode = isDark) }
-            }
-        }
-        viewModelScope.launch {
-            friendsRepository.listenToBlockedUsers().collectLatest { blockedUids ->
-                friendsRepository.getUsers(blockedUids, { blocked ->
-                    _uiState.update { it.copy(blockedUsers = blocked) }
-                }, {})
-            }
-        }
     }
 
     private fun loadCurrentUser() {
@@ -88,7 +52,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                             email = it.email,
                             phone = it.phone,
                             photoUrl = it.photoUrl,
-                            autoAcceptInvites = it.autoAcceptInvites,
                             isLoading = false
                         )
                     }
@@ -97,40 +60,6 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }
-    }
-
-    fun toggleAutoSave(enabled: Boolean) {
-        viewModelScope.launch {
-            savedPhotosStore.setAutoSave(enabled)
-        }
-    }
-
-    fun setUseSystemTheme(useSystem: Boolean) {
-        viewModelScope.launch {
-            themePreferences.setUseSystemTheme(useSystem)
-        }
-    }
-
-    fun setDarkMode(isDark: Boolean) {
-        viewModelScope.launch {
-            themePreferences.setDarkMode(isDark)
-        }
-    }
-
-    fun setAutoAcceptInvites(enabled: Boolean) {
-        val uid = auth.currentUser?.uid ?: return
-        viewModelScope.launch {
-            try {
-                repository.setAutoAcceptInvites(uid, enabled)
-                _uiState.update { it.copy(autoAcceptInvites = enabled) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message) }
-            }
-        }
-    }
-
-    fun setShowSettingsDialog(show: Boolean) {
-        _uiState.update { it.copy(showSettingsDialog = show) }
     }
 
     fun setShowEditNameDialog(show: Boolean) {
@@ -180,9 +109,5 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }
-    }
-
-    fun unblockUser(uid: String) {
-        friendsRepository.unblockUser(uid, {}, {})
     }
 }
