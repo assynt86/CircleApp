@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -64,6 +65,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -394,52 +396,94 @@ fun CircleViewContent(
 
                 val currentPhoto = uiState.photos.getOrNull(pagerState.currentPage)
                 if (currentPhoto != null) {
-                    val isSaving = uiState.inProgressSaves.contains(currentPhoto.id)
-                    val canDelete = !isClosed && (currentPhoto.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid)
-                    val isDeleting = uiState.deletingPhotos.contains(currentPhoto.id)
-
-                    Row(
+                    Column(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 180.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxWidth()
+                            .padding(bottom = 80.dp, start = 16.dp, end = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        IconButton(
-                            onClick = { onSavePhoto(currentPhoto.id) },
-                            enabled = !isSaving,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
-                        ) {
-                            if (isSaving) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.Download,
-                                    contentDescription = "Save to gallery",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(32.dp)
+                        val uploader = uiState.userProfiles[currentPhoto.uploaderUid]
+                        if (uploader != null) {
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.Start)
+                                    .padding(bottom = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (uploader.photoUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = uploader.photoUrl,
+                                        contentDescription = "Uploader profile picture",
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = "Uploader profile picture",
+                                        modifier = Modifier.size(40.dp),
+                                        tint = Color.White
+                                    )
+                                }
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Text(
+                                    text = uploader.username.ifEmpty { uploader.displayName },
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
 
-                        IconButton(
-                            onClick = { onDeletePhoto(currentPhoto.id) },
-                            enabled = canDelete && !isDeleting,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                        val isSaving = uiState.inProgressSaves.contains(currentPhoto.id)
+                        val canDelete = !isClosed && (currentPhoto.uploaderUid == uiState.currentUserUid || uiState.circleInfo?.ownerUid == uiState.currentUserUid)
+                        val isDeleting = uiState.deletingPhotos.contains(currentPhoto.id)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isDeleting) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete photo",
-                                    tint = if (canDelete) Color.White else Color.Gray,
-                                    modifier = Modifier.size(32.dp)
-                                )
+                            IconButton(
+                                onClick = { onSavePhoto(currentPhoto.id) },
+                                enabled = !isSaving,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                            ) {
+                                if (isSaving) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.Download,
+                                        contentDescription = "Save to gallery",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.size(16.dp))
+
+                            IconButton(
+                                onClick = { onDeletePhoto(currentPhoto.id) },
+                                enabled = canDelete && !isDeleting,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(Color.Black.copy(alpha = 0.5f), MaterialTheme.shapes.extraLarge)
+                            ) {
+                                if (isDeleting) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Delete photo",
+                                        tint = if (canDelete) Color.White else Color.Gray,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
                             }
                         }
                     }
