@@ -11,6 +11,7 @@ import com.example.circleapp.data.CircleRepository
 import com.example.circleapp.data.FriendsRepository
 import com.example.circleapp.data.PhotoItem
 import com.example.circleapp.data.SavedPhotosStore
+import com.example.circleapp.data.UserProfile
 import com.example.circleapp.data.saveJpegToGallery
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.delay
@@ -29,6 +30,7 @@ data class CircleUiState(
     val allPhotos: List<PhotoItem> = emptyList(), // Store unfiltered photos
     val blockedUserUids: List<String> = emptyList(),
     val userCircles: List<Circle> = emptyList(),
+    val userProfiles: Map<String, UserProfile> = emptyMap(),
     val error: String? = null,
     val isUploading: Boolean = false,
     val remainingTime: String = "",
@@ -76,6 +78,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
                 _uiState.update { it.copy(allPhotos = photoList) }
                 filterPhotos()
                 fetchDownloadUrls(photoList)
+                fetchUploaderNames(photoList)
                 autoSaveNewPhotos(photoList)
             },
             onError = { e -> _uiState.update { it.copy(error = e.message) } }
@@ -114,6 +117,27 @@ class CircleViewModel(application: Application, private val circleId: String) : 
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private fun fetchUploaderNames(photos: List<PhotoItem>) {
+        viewModelScope.launch {
+            val uidsToFetch = photos.map { it.uploaderUid }.distinct() - _uiState.value.userProfiles.keys
+            if (uidsToFetch.isNotEmpty()) {
+                uidsToFetch.forEach { uid ->
+                    friendsRepository.getUser(uid,
+                        onSuccess = { userProfile ->
+                            if (userProfile != null) {
+                                _uiState.update { currentState ->
+                                    val updatedProfiles = currentState.userProfiles + (uid to userProfile)
+                                    currentState.copy(userProfiles = updatedProfiles)
+                                }
+                            }
+                        },
+                        onError = { /* Handle error */ }
+                    )
                 }
             }
         }

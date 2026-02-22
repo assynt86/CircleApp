@@ -97,7 +97,8 @@ data class PhotoItem(
     val uploaderUid: String,
     val storagePath: String,
     val createdAt: Timestamp?,
-    var downloadUrl: String? = null
+    var downloadUrl: String? = null,
+    var uploaderName: String? = null
 )
 
 data class UserProfile(

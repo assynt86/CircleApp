@@ -217,6 +217,14 @@ class FriendsRepository {
             .addOnFailureListener { onError(it) }
     }
 
+    fun getUser(uid: String, onSuccess: (UserProfile?) -> Unit, onError: (Exception) -> Unit) {
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { snapshot ->
+                onSuccess(snapshot.toObject(UserProfile::class.java))
+            }
+            .addOnFailureListener { onError(it) }
+    }
+
     fun addFriendToCircle(friendUid: String, circleId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         db.collection("circles").document(circleId)
             .update("members", FieldValue.arrayUnion(friendUid))
