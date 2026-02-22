@@ -1,14 +1,11 @@
 package com.example.circleapp.ui.views
 
-import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -16,11 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,18 +25,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.circleapp.ui.theme.LeagueSpartan
 import com.example.circleapp.ui.viewmodels.ProfileViewModel
-import com.example.circleapp.data.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileView(
     onLogout: () -> Unit,
     onFriendsClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     profileViewModel: ProfileViewModel = viewModel()
 ){
     val uiState by profileViewModel.uiState.collectAsState()
-    val context = LocalContext.current
-    
     var showFullScreenPhoto by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -52,7 +45,6 @@ fun ProfileView(
         }
     }
 
-    // Full screen photo viewer
     if (showFullScreenPhoto && uiState.photoUrl.isNotEmpty()) {
         Dialog(
             onDismissRequest = { showFullScreenPhoto = false },
@@ -69,7 +61,7 @@ fun ProfileView(
                     model = uiState.photoUrl,
                     contentDescription = "Full Screen Profile Picture",
                     modifier = Modifier
-                        .padding(top = 100.dp) // Upper middle section
+                        .padding(top = 100.dp)
                         .fillMaxWidth(0.9f)
                         .aspectRatio(1f)
                         .clip(CircleShape),
@@ -77,118 +69,6 @@ fun ProfileView(
                 )
             }
         }
-    }
-
-    if (uiState.showSettingsDialog) {
-        AlertDialog(
-            onDismissRequest = { profileViewModel.setShowSettingsDialog(false) },
-            title = { Text("Settings", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Auto-save photos to gallery", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.isAutoSaveEnabled,
-                            onCheckedChange = { profileViewModel.toggleAutoSave(it) }
-                        )
-                    }
-                    
-                    HorizontalDivider()
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Auto-accept circle invites", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.autoAcceptInvites,
-                            onCheckedChange = { profileViewModel.setAutoAcceptInvites(it) }
-                        )
-                    }
-
-                    HorizontalDivider()
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Use System Theme", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.useSystemTheme,
-                            onCheckedChange = { profileViewModel.setUseSystemTheme(it) }
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .alpha(if (uiState.useSystemTheme) 0.5f else 1.0f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Dark Mode", fontFamily = LeagueSpartan)
-                        Switch(
-                            checked = uiState.isDarkMode,
-                            onCheckedChange = { if (!uiState.useSystemTheme) profileViewModel.setDarkMode(it) },
-                            enabled = !uiState.useSystemTheme
-                        )
-                    }
-
-                    HorizontalDivider()
-
-                    Text("Blocked Accounts", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold)
-                    if (uiState.blockedUsers.isEmpty()) {
-                        Text("No blocked accounts", fontFamily = LeagueSpartan, color = Color.Gray, fontSize = 14.sp)
-                    } else {
-                        LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                            items(uiState.blockedUsers) { blockedUser ->
-                                ListItem(
-                                    headlineContent = { Text(blockedUser.username, fontFamily = LeagueSpartan, fontSize = 16.sp) },
-                                    trailingContent = {
-                                        TextButton(onClick = { profileViewModel.unblockUser(blockedUser.uid) }) {
-                                            Text("Unblock", fontFamily = LeagueSpartan, fontSize = 14.sp)
-                                        }
-                                    },
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider()
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                profileViewModel.setShowSettingsDialog(false)
-                                profileViewModel.setShowBugReportDialog(true)
-                            }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Report Bug", fontFamily = LeagueSpartan)
-                        Icon(
-                            imageVector = Icons.Default.BugReport,
-                            contentDescription = "Report Bug",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { profileViewModel.setShowSettingsDialog(false) }) {
-                    Text("Close", fontFamily = LeagueSpartan)
-                }
-            }
-        )
     }
 
     if (uiState.showEditNameDialog) {
@@ -210,38 +90,6 @@ fun ProfileView(
             },
             dismissButton = {
                 TextButton(onClick = { profileViewModel.setShowEditNameDialog(false) }) {
-                    Text("Cancel", fontFamily = LeagueSpartan)
-                }
-            }
-        )
-    }
-
-    if (uiState.showBugReportDialog) {
-        AlertDialog(
-            onDismissRequest = { profileViewModel.setShowBugReportDialog(false) },
-            title = { Text("Report Bug", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text("Please describe the bug you encountered:", fontFamily = LeagueSpartan)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = uiState.bugDescription,
-                        onValueChange = { profileViewModel.updateBugDescription(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { profileViewModel.submitBugReport() },
-                    enabled = uiState.bugDescription.isNotBlank()
-                ) {
-                    Text("Submit", fontFamily = LeagueSpartan)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { profileViewModel.setShowBugReportDialog(false) }) {
                     Text("Cancel", fontFamily = LeagueSpartan)
                 }
             }
@@ -285,7 +133,6 @@ fun ProfileView(
             ) {
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Profile Picture
                 Box(
                     modifier = Modifier
                         .size(160.dp)
@@ -312,7 +159,6 @@ fun ProfileView(
                         )
                     }
                     
-                    // Overlay "Edit" hint
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -333,7 +179,6 @@ fun ProfileView(
 
                 Spacer(modifier = Modifier.height(60.dp))
 
-                // User Info Fields
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(32.dp)
@@ -363,7 +208,6 @@ fun ProfileView(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Action Buttons
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -381,7 +225,7 @@ fun ProfileView(
                     }
                     
                     Button(
-                        onClick = { profileViewModel.setShowSettingsDialog(true) },
+                        onClick = onSettingsClick,
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = MaterialTheme.shapes.medium,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
@@ -480,7 +324,7 @@ fun CensoredInfoLabel(
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = if (isVisible) value else "•".repeat(12),
+            text = if (isVisible) value else "•".repeat(value.length.coerceAtLeast(8)),
             fontFamily = LeagueSpartan,
             fontSize = 22.sp,
             modifier = Modifier.weight(1f)

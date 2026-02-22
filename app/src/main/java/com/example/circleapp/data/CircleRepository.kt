@@ -564,6 +564,28 @@ class CircleRepository {
             .addOnFailureListener { onError(it) }
     }
 
+    fun reportUser(
+        reporterUid: String,
+        reportedUid: String,
+        reason: String,
+        circleId: String,
+        onSuccess: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val reportData = hashMapOf(
+            "reporterUid" to reporterUid,
+            "reportedUid" to reportedUid,
+            "reason" to reason,
+            "circleId" to circleId,
+            "timestamp" to FieldValue.serverTimestamp()
+        )
+
+        db.collection("reports")
+            .add(reportData)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
+    }
+
 
     private fun generateInviteCode(length: Int = 6): String {
         val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // avoids confusing I/1/O/0

@@ -18,14 +18,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.circleapp.ui.theme.CircleAppTheme
+import com.example.circleapp.ui.viewmodels.BugReportViewModel
 import com.example.circleapp.ui.viewmodels.HomeViewModel
 import com.example.circleapp.ui.viewmodels.MainViewModel
+import com.example.circleapp.ui.views.BlockedUsersView
+import com.example.circleapp.ui.views.BugReportView
 import com.example.circleapp.ui.views.CameraView
 import com.example.circleapp.ui.views.CircleView
 import com.example.circleapp.ui.views.HomeView
 import com.example.circleapp.ui.views.ProfileView
 import com.example.circleapp.ui.views.CircleSettingsView
 import com.example.circleapp.ui.views.FriendsView
+import com.example.circleapp.ui.views.SettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.example.circleapp.ui.views.AuthView
@@ -155,6 +159,9 @@ fun AppNavigation() {
                         },
                         onFriendsClick = {
                             navController.navigate("friends")
+                        },
+                        onSettingsClick = {
+                            navController.navigate("settings")
                         }
                     )
                 }
@@ -186,7 +193,9 @@ fun AppNavigation() {
             route = "circle_settings/{circleId}",
             arguments = listOf(navArgument("circleId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val circleId = backStackEntry.arguments?.getString("circleId")
+            val circleId = backStackEntry.arguments?.getString(
+                "circleId"
+            )
             if (circleId != null) {
                 CircleSettingsView(
                     circleId = circleId,
@@ -198,6 +207,33 @@ fun AppNavigation() {
                     }
                 )
             }
+        }
+
+        // -------- App Settings --------
+        composable("settings") {
+            SettingsView(
+                onBack = { navController.popBackStack() },
+                onReportBug = { navController.navigate("bug_report") },
+                onBlockedAccountsClick = { navController.navigate("blocked_users") }
+            )
+        }
+
+        // -------- Bug Report --------
+        composable("bug_report") {
+            val bugReportViewModel: BugReportViewModel = viewModel()
+            BugReportView(
+                onBack = { navController.popBackStack() },
+                onReport = { report ->
+                    bugReportViewModel.submitBugReport(report) {
+                        navController.popBackStack()
+                    }
+                }
+            )
+        }
+
+        // -------- Blocked Users --------
+        composable("blocked_users") {
+            BlockedUsersView(onBack = { navController.popBackStack() })
         }
 
         // -------- Friends --------

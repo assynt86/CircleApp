@@ -29,7 +29,10 @@ data class CircleSettingsUiState(
     val successMessage: String? = null,
     val showDeleteConfirmation: Boolean = false,
     val showLeaveConfirmation: Boolean = false,
-    val currentUserName: String = ""
+    val currentUserName: String = "",
+    val selectedMember: UserProfile? = null,
+    val showUserActionDialog: Boolean = false,
+    val showReportDialog: Boolean = false
 )
 
 class CircleSettingsViewModel(
@@ -102,6 +105,65 @@ class CircleSettingsViewModel(
                 }, {})
             }
         }
+    }
+
+    fun onMemberSelected(member: UserProfile) {
+        _uiState.update { it.copy(selectedMember = member, showUserActionDialog = true) }
+    }
+
+    fun dismissUserActionDialog() {
+        _uiState.update { it.copy(selectedMember = null, showUserActionDialog = false) }
+    }
+
+    fun onReportSelected() {
+        _uiState.update { it.copy(showUserActionDialog = false, showReportDialog = true) }
+    }
+
+    fun dismissReportDialog() {
+        _uiState.update { it.copy(showReportDialog = false, selectedMember = null) }
+    }
+
+    fun reportUser(reason: String) {
+        viewModelScope.launch {
+            val reporter = userRepository.getCurrentUser() ?: return@launch
+            val reported = _uiState.value.selectedMember ?: return@launch
+
+            repository.reportUser(reporter.uid, reported.uid, reason, circleId,
+                onSuccess = {
+                    _uiState.update { it.copy(successMessage = "User reported", showReportDialog = false, selectedMember = null) }
+                },
+                onError = { e ->
+                    _uiState.update { it.copy(error = e.message, showReportDialog = false, selectedMember = null) }
+                }
+            )
+        }
+    }
+
+    fun blockSelectedUser() {
+        val selectedUid = _uiState.value.selectedMember?.uid ?: return
+        friendsRepository.blockUser(selectedUid, 
+            onSuccess = { 
+                 _uiState.update { it.copy(successMessage = "User blocked", showUserActionDialog = false, selectedMember = null) }
+            },
+            onError = { e -> 
+                _uiState.update { it.copy(error = e.message, showUserActionDialog = false, selectedMember = null) }
+            }
+        )
+    }
+
+    fun sendFriendRequestToSelectedUser() {
+        val username = _uiState.value.selectedMember?.username ?: return
+        friendsRepository.sendFriendRequest(username, 
+            onSuccess = {
+                _uiState.update { it.copy(successMessage = "Friend request sent", showUserActionDialog = false, selectedMember = null) }
+            },
+            onError = { e ->
+                _uiState.update { it.copy(error = e.message, showUserActionDialog = false, selectedMember = null) }
+            },
+            onNotFound = {
+                _uiState.update { it.copy(error = "User not found", showUserActionDialog = false, selectedMember = null) }
+            }
+        )
     }
 
     fun toggleFriendSelection(uid: String) {

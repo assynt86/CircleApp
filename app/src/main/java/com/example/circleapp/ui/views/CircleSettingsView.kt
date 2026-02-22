@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.circleapp.data.UserProfile
 import com.example.circleapp.ui.theme.LeagueSpartan
 import com.example.circleapp.ui.viewmodels.CircleSettingsViewModel
 import com.example.circleapp.ui.viewmodels.CircleSettingsViewModelFactory
@@ -195,6 +196,7 @@ fun CircleSettingsView(
                     ListItem(
                         headlineContent = { Text(member.username, fontFamily = LeagueSpartan) },
                         supportingContent = { Text(member.displayName, fontFamily = LeagueSpartan) },
+                        modifier = Modifier.clickable { viewModel.onMemberSelected(member) },
                         leadingContent = {
                             if (member.photoUrl.isNotEmpty()) {
                                 AsyncImage(
@@ -208,11 +210,7 @@ fun CircleSettingsView(
                             }
                         },
                         trailingContent = {
-                            if (uiState.isAdmin && member.uid != uiState.circleInfo?.ownerUid) {
-                                IconButton(onClick = { viewModel.kickMember(member.uid) }) {
-                                    Icon(Icons.Default.PersonRemove, contentDescription = "Kick", tint = Color.Red)
-                                }
-                            } else if (member.uid == uiState.circleInfo?.ownerUid) {
+                             if (member.uid == uiState.circleInfo?.ownerUid) {
                                 Text("Admin", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
                         }
@@ -250,6 +248,28 @@ fun CircleSettingsView(
     }
 
     // Dialogs
+    if (uiState.showUserActionDialog) {
+        uiState.selectedMember?.let { member ->
+            UserActionDialog(
+                member = member,
+                isAdmin = uiState.isAdmin,
+                isFriend = uiState.friends.any { it.uid == member.uid },
+                onDismiss = { viewModel.dismissUserActionDialog() },
+                onReport = { viewModel.onReportSelected() },
+                onBlock = { viewModel.blockSelectedUser() },
+                onAddFriend = { viewModel.sendFriendRequestToSelectedUser() },
+                onKick = { viewModel.kickMember(member.uid) }
+            )
+        }
+    }
+
+    if (uiState.showReportDialog) {
+        ReportUserDialog(
+            onDismiss = { viewModel.dismissReportDialog() },
+            onReport = { reason -> viewModel.reportUser(reason) }
+        )
+    }
+
     if (showEditNameDialog) {
         AlertDialog(
             onDismissRequest = { showEditNameDialog = false },
@@ -370,4 +390,87 @@ fun CircleSettingsView(
             }
         )
     }
+}
+
+@Composable
+fun UserActionDialog(
+    member: UserProfile,
+    isAdmin: Boolean,
+    isFriend: Boolean,
+    onDismiss: () -> Unit,
+    onReport: () -> Unit,
+    onBlock: () -> Unit,
+    onAddFriend: () -> Unit,
+    onKick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(member.username, fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn {
+                item { TextButton(onClick = onReport) { Text("Report User") } }
+                item { TextButton(onClick = onBlock) { Text("Block User") } }
+                if (!isFriend) {
+                    item { TextButton(onClick = onAddFriend) { Text("Send Friend Request") } }
+                }
+                if (isAdmin) {
+                    item { TextButton(onClick = onKick) { Text("Kick from Circle", color = Color.Red) } }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+fun ReportUserDialog(
+    onDismiss: () -> Unit,
+    onReport: (String) -> Unit
+) {
+    val reportReasons = listOf(
+        "Spam or Scams",
+        "Nudity or Sexual Activity",
+        "Hate Speech or Symbols",
+        "Bullying or Harassment",
+        "False Information",
+        "Other"
+    )
+    var selectedReason by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Report User", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("Select a reason for reporting this user:", fontFamily = LeagueSpartan, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(16.dp))
+                reportReasons.forEach { reason ->
+                    Row(Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedReason = reason }
+                        .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = (selectedReason == reason),
+                            onClick = { selectedReason = reason }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(reason)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { selectedReason?.let { onReport(it) } },
+                enabled = selectedReason != null
+            ) { Text("Submit Report") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
