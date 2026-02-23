@@ -1,4 +1,4 @@
-package com.example.circleapp
+package com.example.crcle
 
 import org.junit.Test
 

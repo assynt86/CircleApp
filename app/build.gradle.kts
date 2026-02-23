@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.circleapp"
+    namespace = "com.crcleapp.crcle"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.circleapp"
+        applicationId = "com.crcleapp.crcle"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
