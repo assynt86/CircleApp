@@ -214,7 +214,12 @@ fun AppNavigation() {
             SettingsView(
                 onBack = { navController.popBackStack() },
                 onReportBug = { navController.navigate("bug_report") },
-                onBlockedAccountsClick = { navController.navigate("blocked_users") }
+                onBlockedAccountsClick = { navController.navigate("blocked_users") },
+                onAccountDeleted = {
+                    navController.navigate("auth") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
 

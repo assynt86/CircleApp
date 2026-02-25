@@ -1,5 +1,6 @@
 package com.crcleapp.crcle.data
 
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -38,5 +39,22 @@ class UserRepository {
             "timestamp" to FieldValue.serverTimestamp()
         )
         db.collection("bugs").add(report).await()
+    }
+
+    suspend fun deleteAccount(password: String) {
+        val user = auth.currentUser ?: throw Exception("User not signed in")
+        val email = user.email ?: throw Exception("User email not found")
+        
+        // 1. Re-authenticate
+        val credential = EmailAuthProvider.getCredential(email, password)
+        user.reauthenticate(credential).await()
+
+        val uid = user.uid
+
+        // 2. Cleanup User Data
+        db.collection("users").document(uid).delete().await()
+        
+        // 3. Delete Auth Account
+        user.delete().await()
     }
 }

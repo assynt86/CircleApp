@@ -24,7 +24,10 @@ data class SettingsUiState(
     val notificationsEnabled: Boolean = true,
     val blockedUsers: List<UserProfile> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val showDeleteDialog: Boolean = false,
+    val deletePassword: String = "",
+    val isDeleting: Boolean = false
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -120,5 +123,39 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun unblockUser(uid: String) {
         friendsRepository.unblockUser(uid, {}, {})
+    }
+
+    fun showDeleteDialog() {
+        _uiState.update { it.copy(showDeleteDialog = true, deletePassword = "", error = null) }
+    }
+
+    fun hideDeleteDialog() {
+        _uiState.update { it.copy(showDeleteDialog = false, deletePassword = "") }
+    }
+
+    fun updateDeletePassword(password: String) {
+        _uiState.update { it.copy(deletePassword = password) }
+    }
+
+    fun deleteAccount(onSuccess: () -> Unit) {
+        val password = _uiState.value.deletePassword
+        if (password.isEmpty()) {
+            _uiState.update { it.copy(error = "Password is required") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true, error = null) }
+            try {
+                repository.deleteAccount(password)
+                onSuccess()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isDeleting = false, error = e.message) }
+            }
+        }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 }
