@@ -109,6 +109,10 @@ class FriendsViewModel : ViewModel() {
         repository.declineFriendRequest(reqId, {}, {})
     }
 
+    fun cancelRequest(reqId: String) {
+        repository.cancelFriendRequest(reqId, {}, {})
+    }
+
     fun removeFriend(uid: String) {
         repository.removeFriend(uid, {
             _uiState.update { it.copy(showRemoveConfirmation = null) }

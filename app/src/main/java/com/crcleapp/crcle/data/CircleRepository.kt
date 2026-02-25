@@ -23,6 +23,7 @@ class CircleRepository {
      * - closeAt = now + durationDays
      * - deleteAt = closeAt + 48 hours
      * - cleanedUp = false (for your scheduled Cloud Function)
+     * Also creates a document in circle_codes for public lookup.
      */
     fun createCircle(
         circleName: String,
@@ -56,7 +57,24 @@ class CircleRepository {
         db.collection("circles")
             .add(circleData)
             .addOnSuccessListener { docRef ->
-                onSuccess(docRef.id)
+                val circleId = docRef.id
+
+                // Also create the lookup document in circle_codes
+                val codeData = hashMapOf(
+                    "circleId" to circleId,
+                    "circleName" to circleName,
+                    "circleBackgroundUrl" to null,
+                    "status" to "open"
+                )
+
+                db.collection("circle_codes").document(inviteCode).set(codeData)
+                    .addOnSuccessListener {
+                        onSuccess(circleId)
+                    }
+                    .addOnFailureListener { e ->
+                        // Even if this fails, we have the circle, but let's report it
+                        onError(e)
+                    }
             }
             .addOnFailureListener { e ->
                 onError(e)
@@ -64,8 +82,7 @@ class CircleRepository {
     }
 
     /**
-     * Join a circle by invite code.
-     * This finds the circle and adds your uid to members[].
+     * Join a circle by invite code using the new circle_codes collection.
      */
     fun joinCircleByInviteCode(
         inviteCode: String,
@@ -78,18 +95,20 @@ class CircleRepository {
             return
         }
 
-        db.collection("circles")
-            .whereEqualTo("inviteCode", inviteCode.trim())
-            .limit(1)
+        db.collection("circle_codes")
+            .document(inviteCode.trim())
             .get()
-            .addOnSuccessListener { snap ->
-                if (snap.isEmpty) {
+            .addOnSuccessListener { doc ->
+                if (!doc.exists()) {
                     onNotFound()
                     return@addOnSuccessListener
                 }
 
-                val circleDoc = snap.documents.first()
-                val circleId = circleDoc.id
+                val circleId = doc.getString("circleId") ?: ""
+                if (circleId.isEmpty()) {
+                    onNotFound()
+                    return@addOnSuccessListener
+                }
 
                 // Add uid to members array (only adds if not already present)
                 db.collection("circles")
@@ -103,22 +122,30 @@ class CircleRepository {
             .addOnFailureListener { e -> onError(e) }
     }
 
+    /**
+     * Look up circle info for preview before joining.
+     */
     fun getCircleByInviteCode(
         inviteCode: String,
         onSuccess: (Circle) -> Unit,
         onNotFound: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        db.collection("circles")
-            .whereEqualTo("inviteCode", inviteCode.trim())
-            .limit(1)
+        db.collection("circle_codes")
+            .document(inviteCode.trim())
             .get()
-            .addOnSuccessListener { snap ->
-                if (snap.isEmpty) {
+            .addOnSuccessListener { doc ->
+                if (!doc.exists()) {
                     onNotFound()
                 } else {
-                    val circle = snap.documents.first().toObject(Circle::class.java)
-                    if (circle != null) onSuccess(circle) else onNotFound()
+                    val circle = Circle(
+                        id = doc.getString("circleId") ?: "",
+                        name = doc.getString("circleName") ?: "",
+                        backgroundUrl = doc.getString("circleBackgroundUrl"),
+                        status = doc.getString("status") ?: "open",
+                        inviteCode = doc.id
+                    )
+                    onSuccess(circle)
                 }
             }
             .addOnFailureListener { onError(it) }
@@ -350,7 +377,7 @@ class CircleRepository {
     }
 
     /**
-     * Get details of all members of a circle.
+     * Get details of all members of a circle from user_public.
      */
     fun getCircleMembers(
         memberUids: List<String>,
@@ -362,7 +389,7 @@ class CircleRepository {
             return
         }
 
-        db.collection("users")
+        db.collection("user_public")
             .whereIn("uid", memberUids)
             .get()
             .addOnSuccessListener { snapshot ->
@@ -389,7 +416,7 @@ class CircleRepository {
     }
 
     /**
-     * Add a member to the circle by username.
+     * Add a member to the circle by username using user_public lookup.
      */
     fun addMemberByUsername(
         circleId: String,
@@ -398,7 +425,7 @@ class CircleRepository {
         onNotFound: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        db.collection("users")
+        db.collection("user_public")
             .whereEqualTo("username", username.trim())
             .limit(1)
             .get()
@@ -508,13 +535,18 @@ class CircleRepository {
      */
     fun updateCircleName(
         circleId: String,
+        inviteCode: String,
         newName: String,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        db.collection("circles")
-            .document(circleId)
-            .update("name", newName.trim())
+        val batch = db.batch()
+        batch.update(db.collection("circles").document(circleId), "name", newName.trim())
+        if (inviteCode.isNotEmpty()) {
+            batch.update(db.collection("circle_codes").document(inviteCode), "circleName", newName.trim())
+        }
+
+        batch.commit()
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it) }
     }
@@ -524,6 +556,7 @@ class CircleRepository {
      */
     fun updateCircleBackground(
         circleId: String,
+        inviteCode: String,
         photoUri: Uri,
         onSuccess: (String) -> Unit,
         onError: (Exception) -> Unit
@@ -535,9 +568,13 @@ class CircleRepository {
             .addOnSuccessListener {
                 storageRef.downloadUrl.addOnSuccessListener { uri ->
                     val url = uri.toString()
-                    db.collection("circles")
-                        .document(circleId)
-                        .update("backgroundUrl", url)
+                    val batch = db.batch()
+                    batch.update(db.collection("circles").document(circleId), "backgroundUrl", url)
+                    if (inviteCode.isNotEmpty()) {
+                        batch.update(db.collection("circle_codes").document(inviteCode), "circleBackgroundUrl", url)
+                    }
+
+                    batch.commit()
                         .addOnSuccessListener { onSuccess(url) }
                         .addOnFailureListener { onError(it) }
                 }.addOnFailureListener { onError(it) }
@@ -550,14 +587,17 @@ class CircleRepository {
      */
     fun deleteCircle(
         circleId: String,
+        inviteCode: String,
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        // In a real app, you should also delete all photos in storage and subcollections.
-        // For simplicity, we just delete the circle document here.
-        db.collection("circles")
-            .document(circleId)
-            .delete()
+        val batch = db.batch()
+        batch.delete(db.collection("circles").document(circleId))
+        if (inviteCode.isNotEmpty()) {
+            batch.delete(db.collection("circle_codes").document(inviteCode))
+        }
+
+        batch.commit()
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it) }
     }

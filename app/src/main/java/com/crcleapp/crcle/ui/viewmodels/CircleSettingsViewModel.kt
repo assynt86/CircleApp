@@ -179,8 +179,9 @@ class CircleSettingsViewModel(
 
     fun updateCircleName(newName: String) {
         if (newName.isBlank()) return
+        val inviteCode = _uiState.value.circleInfo?.inviteCode ?: ""
         _uiState.update { it.copy(isLoading = true) }
-        repository.updateCircleName(circleId, newName,
+        repository.updateCircleName(circleId, inviteCode, newName,
             onSuccess = {
                 _uiState.update { it.copy(isLoading = false, successMessage = "Name updated") }
             },
@@ -191,8 +192,9 @@ class CircleSettingsViewModel(
     }
 
     fun updateBackground(uri: Uri) {
+        val inviteCode = _uiState.value.circleInfo?.inviteCode ?: ""
         _uiState.update { it.copy(isLoading = true) }
-        repository.updateCircleBackground(circleId, uri,
+        repository.updateCircleBackground(circleId, inviteCode, uri,
             onSuccess = { url ->
                 _uiState.update { it.copy(isLoading = false, successMessage = "Background updated") }
             },
@@ -232,7 +234,7 @@ class CircleSettingsViewModel(
     private fun handleTypedUsername(typedUsername: String, currentUid: String, circleInfo: CircleInfo) {
         if (typedUsername.isNotBlank()) {
             com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                .collection("users")
+                .collection("user_public")
                 .whereEqualTo("username", typedUsername.trim())
                 .limit(1)
                 .get()
@@ -306,8 +308,9 @@ class CircleSettingsViewModel(
     }
 
     fun deleteCircle(onDeleted: () -> Unit) {
+        val inviteCode = _uiState.value.circleInfo?.inviteCode ?: ""
         _uiState.update { it.copy(isLoading = true) }
-        repository.deleteCircle(circleId,
+        repository.deleteCircle(circleId, inviteCode,
             onSuccess = {
                 onDeleted()
             },

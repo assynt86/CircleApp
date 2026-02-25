@@ -17,11 +17,25 @@ class UserRepository {
     }
 
     suspend fun updateProfilePicture(uid: String, photoUrl: String) {
-        db.collection("users").document(uid).update("photoUrl", photoUrl).await()
+        val batch = db.batch()
+        val userRef = db.collection("users").document(uid)
+        val publicRef = db.collection("user_public").document(uid)
+
+        batch.update(userRef, "photoUrl", photoUrl)
+        batch.update(publicRef, "photoUrl", photoUrl)
+
+        batch.commit().await()
     }
 
     suspend fun updateDisplayName(uid: String, displayName: String) {
-        db.collection("users").document(uid).update("displayName", displayName).await()
+        val batch = db.batch()
+        val userRef = db.collection("users").document(uid)
+        val publicRef = db.collection("user_public").document(uid)
+
+        batch.update(userRef, "displayName", displayName)
+        batch.update(publicRef, "displayName", displayName)
+
+        batch.commit().await()
     }
 
     suspend fun setAutoAcceptInvites(uid: String, enabled: Boolean) {
