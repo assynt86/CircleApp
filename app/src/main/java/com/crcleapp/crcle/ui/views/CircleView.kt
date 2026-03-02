@@ -70,6 +70,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.crcleapp.crcle.ui.components.ZoomableImage
 import com.crcleapp.crcle.ui.viewmodels.CircleUiState
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModel
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModelFactory
@@ -384,11 +385,13 @@ fun CircleViewContent(
                     pageSpacing = 16.dp,
                     beyondViewportPageCount = 2
                 ) { page ->
-                    AsyncImage(
+                    ZoomableImage(
                         model = uiState.photos[page].downloadUrl,
                         contentDescription = "Full screen image",
+                        isCurrentPage = pagerState.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit
+                        contentScale = ContentScale.Fit,
+                        onTap = { onSetFullscreenImage(null) }
                     )
                 }
 

@@ -11,12 +11,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -78,25 +82,16 @@ fun SettingsView(
     Scaffold(
         topBar = {
             TopAppBar(
-                modifier = Modifier.height(120.dp),
                 title = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .padding(start = 8.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            text = "Settings",
-                            fontFamily = LeagueSpartan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 40.sp,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                    }
+                    Text(
+                        text = "Settings",
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 32.sp
+                    )
                 },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.padding(top = 16.dp)) {
+                actions = {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -130,6 +125,13 @@ fun SettingsView(
                         label = "Auto-accept circle invites",
                         checked = uiState.autoAcceptInvites,
                         onCheckedChange = { viewModel.setAutoAcceptInvites(it) }
+                    )
+                }
+                item {
+                    SettingsToggleRow(
+                        label = "Open on Home instead of Camera",
+                        checked = uiState.openOnHome,
+                        onCheckedChange = { viewModel.toggleOpenOnHome(it) }
                     )
                 }
 
@@ -209,7 +211,9 @@ fun SettingsView(
                 item {
                     Button(
                         onClick = { viewModel.showDeleteDialog() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEBEE), contentColor = Color.Red),
                         shape = MaterialTheme.shapes.medium
                     ) {
@@ -290,7 +294,8 @@ fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .heightIn(min = 56.dp)
+            .padding(vertical = 4.dp)
             .alpha(if (enabled) 1f else 0.5f),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -298,7 +303,8 @@ fun SettingsToggleRow(
         Text(
             text = label,
             fontFamily = LeagueSpartan,
-            fontSize = 18.sp
+            fontSize = 18.sp,
+            modifier = Modifier.weight(1f)
         )
         Switch(
             checked = checked,
@@ -316,7 +322,8 @@ fun SettingsClickableRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .heightIn(min = 56.dp)
+            .padding(vertical = 4.dp)
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -324,7 +331,8 @@ fun SettingsClickableRow(
         Text(
             text = label,
             fontFamily = LeagueSpartan,
-            fontSize = 18.sp
+            fontSize = 18.sp,
+            modifier = Modifier.weight(1f)
         )
         Icon(
             imageVector = Icons.Default.ChevronRight,

@@ -47,25 +47,16 @@ fun AuthView(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                modifier = Modifier.height(120.dp),
+            LargeTopAppBar(
                 title = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .padding(start = 8.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            text = if (uiState.mode == AuthMode.LOGIN) "Login" else "Create Account",
-                            fontFamily = LeagueSpartan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 40.sp,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                    }
+                    Text(
+                        text = if (uiState.mode == AuthMode.LOGIN) "Login" else "Create Account",
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 40.sp
+                    )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = Color.Transparent
                 )
             )
@@ -228,7 +219,9 @@ fun AuthView(
                     focusManager.clearFocus()
                     onAuthAction()
                 },
-                modifier = Modifier.fillMaxWidth().height(60.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp),
                 shape = MaterialTheme.shapes.medium
             ) {
                 if (uiState.isLoading) {
@@ -245,7 +238,9 @@ fun AuthView(
 
             TextButton(
                 onClick = { authViewModel.toggleMode() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
             ) {
                 Text(
                     if (uiState.mode == AuthMode.LOGIN) "Need an account? Sign up" else "Have an account? Login",
