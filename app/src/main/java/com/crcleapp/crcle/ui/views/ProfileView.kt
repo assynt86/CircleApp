@@ -25,6 +25,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.crcleapp.crcle.ui.components.ZoomableImage
 import com.crcleapp.crcle.ui.theme.LeagueSpartan
 import com.crcleapp.crcle.ui.viewmodels.ProfileViewModel
 
@@ -59,14 +60,16 @@ fun ProfileView(
                     .clickable { showFullScreenPhoto = false },
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
+                ZoomableImage(
                     model = uiState.photoUrl,
                     contentDescription = "Full Screen Profile Picture",
+                    isCurrentPage = true,
                     modifier = Modifier
                         .fillMaxWidth(0.9f)
                         .aspectRatio(1f)
                         .clip(CircleShape),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    onTap = { showFullScreenPhoto = false }
                 )
             }
         }
