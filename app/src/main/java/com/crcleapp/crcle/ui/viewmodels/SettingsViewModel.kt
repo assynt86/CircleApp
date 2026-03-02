@@ -3,6 +3,7 @@ package com.crcleapp.crcle.ui.viewmodels
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.crcleapp.crcle.data.CirclePreferencesStore
 import com.crcleapp.crcle.data.FriendsRepository
 import com.crcleapp.crcle.data.NotificationPreferencesStore
 import com.crcleapp.crcle.data.SavedPhotosStore
@@ -21,6 +22,7 @@ data class SettingsUiState(
     val useSystemTheme: Boolean = true,
     val isDarkMode: Boolean = true,
     val autoAcceptInvites: Boolean = false,
+    val openOnHome: Boolean = false,
     val notificationsEnabled: Boolean = true,
     val blockedUsers: List<UserProfile> = emptyList(),
     val isLoading: Boolean = false,
@@ -36,6 +38,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val savedPhotosStore = SavedPhotosStore(application)
     private val themePreferences = ThemePreferences(application)
     private val notificationPreferences = NotificationPreferencesStore(application)
+    private val circlePreferences = CirclePreferencesStore(application)
     private val auth = FirebaseAuth.getInstance()
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -61,6 +64,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             notificationPreferences.notificationsEnabledFlow.collectLatest { enabled ->
                 _uiState.update { it.copy(notificationsEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            circlePreferences.openOnHomeFlow.collectLatest { enabled ->
+                _uiState.update { it.copy(openOnHome = enabled) }
             }
         }
         viewModelScope.launch {
@@ -118,6 +126,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
             }
+        }
+    }
+
+    fun toggleOpenOnHome(enabled: Boolean) {
+        viewModelScope.launch {
+            circlePreferences.setOpenOnHome(enabled)
         }
     }
 

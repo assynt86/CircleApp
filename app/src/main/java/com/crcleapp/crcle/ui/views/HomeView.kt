@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -99,13 +100,16 @@ fun HomeView(
                     .background(MaterialTheme.colorScheme.background),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
                     Image(
                         painter = painterResource(id = R.drawable.app_logo),
                         contentDescription = null,
                         modifier = Modifier
-                            .height(300.dp)
-                            .width(600.dp),
+                            .fillMaxWidth(0.6f)
+                            .aspectRatio(1.2f),
                         contentScale = ContentScale.Fit,
                         colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
                     )
@@ -144,23 +148,26 @@ fun HomeViewContent(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                modifier = Modifier.height(180.dp),
-                title = { 
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding()))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
                     Image(
                         painter = painterResource(id = R.drawable.app_logo),
                         contentDescription = stringResource(R.string.app_name),
                         modifier = Modifier
-                            .height(150.dp)
-                            .width(300.dp),
+                            .fillMaxWidth(0.35f)
+                            .aspectRatio(1.5f),
                         contentScale = ContentScale.Fit,
-                        alignment = Alignment.CenterStart,
+                        alignment = Alignment.TopStart,
                         colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface)
                     )
-                },
-                actions = {
                     Row(
-                        modifier = Modifier.fillMaxHeight(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (uiState.pendingInvitesCount > 0) {
@@ -179,18 +186,15 @@ fun HomeViewContent(
                             Icon(Icons.Filled.Add, contentDescription = "Create Circle")
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
+                }
+            }
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
             Text(
                 "Your circles", 
@@ -209,7 +213,8 @@ fun HomeViewContent(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     items(uiState.circles) { circle ->
                         val baseColor = when {
@@ -278,7 +283,7 @@ fun HomeViewContent(
                                         textAlign = TextAlign.Center,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         style = MaterialTheme.typography.titleLarge.copy(
-                                            fontSize = 32.sp,
+                                            fontSize = 24.sp,
                                             fontWeight = FontWeight.ExtraBold
                                         ),
                                         fontFamily = LeagueSpartan,
@@ -304,7 +309,8 @@ fun HomeViewContent(
                         value = uiState.newCircleName,
                         onValueChange = onNewCircleNameChange,
                         label = { Text("Circle name", fontFamily = LeagueSpartan) },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(24.dp))
                     Text("Duration: ${uiState.newCircleDurationDays.toInt()} days", fontFamily = LeagueSpartan)
@@ -357,7 +363,7 @@ fun HomeViewContent(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(250.dp)
+                                .aspectRatio(1f)
                                 .clip(MaterialTheme.shapes.medium),
                             contentAlignment = Alignment.Center
                         ) {
@@ -389,7 +395,7 @@ fun HomeViewContent(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(250.dp)
+                                .height(200.dp)
                                 .clip(MaterialTheme.shapes.medium)
                                 .background(Color.Gray)
                                 .clickable { permissionLauncher.launch(android.Manifest.permission.CAMERA) },
@@ -401,35 +407,38 @@ fun HomeViewContent(
                     Spacer(Modifier.height(16.dp))
                     Text("Or enter code manually", fontFamily = LeagueSpartan)
                     Spacer(Modifier.height(8.dp))
-                    BasicTextField(
-                        value = uiState.joinInviteCode,
-                        onValueChange = onInviteCodeChange,
-                        decorationBox = { innerTextField ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                for (index in 0 until 6) {
-                                    val char = uiState.joinInviteCode.getOrNull(index)
-                                    Box(
-                                        modifier = Modifier
-                                            .width(35.dp)
-                                            .height(45.dp)
-                                            .border(
-                                                1.dp,
-                                                if (char != null) MaterialTheme.colorScheme.primary else Color.Gray,
-                                                RoundedCornerShape(8.dp)
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = char?.toString() ?: "_",
-                                            style = MaterialTheme.typography.headlineMedium,
-                                            fontFamily = LeagueSpartan,
-                                            color = if (char == null) Color.Gray else MaterialTheme.colorScheme.onSurface
-                                        )
+                    
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        BasicTextField(
+                            value = uiState.joinInviteCode,
+                            onValueChange = onInviteCodeChange,
+                            decorationBox = { innerTextField ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    for (index in 0 until 6) {
+                                        val char = uiState.joinInviteCode.getOrNull(index)
+                                        Box(
+                                            modifier = Modifier
+                                                .width(35.dp)
+                                                .height(45.dp)
+                                                .border(
+                                                    1.dp,
+                                                    if (char != null) MaterialTheme.colorScheme.primary else Color.Gray,
+                                                    RoundedCornerShape(8.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = char?.toString() ?: "_",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontFamily = LeagueSpartan,
+                                                color = if (char == null) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             },
             confirmButton = {

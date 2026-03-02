@@ -37,7 +37,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -45,6 +47,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -60,6 +63,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.sin
 
 val LeagueSpartan = FontFamily(
     Font(R.font.league_spartan_bold, FontWeight.Bold)
@@ -78,6 +83,7 @@ fun CameraView(
     val lifecycleOwner = LocalLifecycleOwner.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
+    val configuration = LocalConfiguration.current
     val homeUiState by homeViewModel.uiState.collectAsState()
     val cameraUiState by cameraViewModel.uiState.collectAsState()
     
@@ -146,6 +152,7 @@ fun CameraView(
     // Animation states
     var buttonPosition by remember { mutableStateOf(Offset.Zero) }
     var screenCenter by remember { mutableStateOf(Offset.Zero) }
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
     val animProgress = remember { Animatable(0f) }
 
     LaunchedEffect(cameraUiState.showFlashUIEffect) {
@@ -226,14 +233,16 @@ fun CameraView(
             .background(MaterialTheme.colorScheme.background)
             .onGloballyPositioned { coords ->
                 screenCenter = Offset(coords.size.width / 2f, coords.size.height / 2f)
+                containerSize = coords.size
             }
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top Header - Flash, Grid, and Timer
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 48.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)
+                    .padding(8.dp)
             ) {
                 Row(
                     modifier = Modifier.align(Alignment.CenterStart),
@@ -501,75 +510,134 @@ fun CameraView(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(start = 24.dp)
-                    .width(2.dp)
+                    .width(4.dp)
                     .height(200.dp)
-                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f), RoundedCornerShape(1.dp)),
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f), RoundedCornerShape(2.dp)),
                 contentAlignment = Alignment.BottomCenter
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(cameraUiState.zoomLevel.coerceIn(0.01f, 1f))
-                        .background(MaterialTheme.colorScheme.onBackground, RoundedCornerShape(1.dp))
+                        .background(MaterialTheme.colorScheme.onBackground, RoundedCornerShape(2.dp))
                 )
             }
         }
 
         // Bottom Controls
+        val screenWidth = configuration.screenWidthDp.dp
+        val circlesBtnSize = (screenWidth * 0.18f).coerceIn(48.dp, 80.dp)
+        val captureBtnSize = (screenWidth * 0.25f).coerceIn(60.dp, 110.dp)
+        val flipBtnSize = (screenWidth * 0.14f).coerceIn(40.dp, 64.dp)
+
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 96.dp)
+                .padding(bottom = 48.dp)
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            // Circles Button
+            // Helper Container for side buttons to find midpoint between wall and capture button edge
             Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 48.dp)
-                    .size(60.dp)
-                    .onGloballyPositioned { coords ->
-                        val pos = coords.positionInRoot()
-                        buttonPosition = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
-                    }
-                    .clickable { cameraViewModel.setShowCirclesPopup(true) }
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { rotationZ = animatedRotation },
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Left midpoint box (Wall to Capture edge)
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .border(2.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)),
+                        modifier = Modifier.weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "c",
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontSize = 64.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = LeagueSpartan,
-                            style = TextStyle(
-                                platformStyle = PlatformTextStyle(
-                                    includeFontPadding = false
-                                )
-                            ),
-                            modifier = Modifier.offset(x = (-2).dp, y = (-4).dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(circlesBtnSize)
+                                .onGloballyPositioned { coords ->
+                                    val pos = coords.positionInRoot()
+                                    buttonPosition = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
+                                }
+                                .clickable { cameraViewModel.setShowCirclesPopup(true) }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { rotationZ = animatedRotation },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .border(2.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Triple Venn Diagram Icon
+                                    val tintColor = MaterialTheme.colorScheme.onBackground
+                                    Canvas(modifier = Modifier.fillMaxSize(0.55f)) {
+                                        val r = size.minDimension / 3f
+                                        val center = Offset(size.width / 2, size.height / 2)
+                                        
+                                        // Top circle
+                                        drawCircle(
+                                            color = tintColor,
+                                            radius = r,
+                                            center = Offset(center.x, center.y - r * 0.5f),
+                                            style = Stroke(width = 2.5.dp.toPx())
+                                        )
+                                        // Bottom left circle
+                                        drawCircle(
+                                            color = tintColor,
+                                            radius = r,
+                                            center = Offset(center.x - r * 0.45f, center.y + r * 0.35f),
+                                            style = Stroke(width = 2.5.dp.toPx())
+                                        )
+                                        // Bottom right circle
+                                        drawCircle(
+                                            color = tintColor,
+                                            radius = r,
+                                            center = Offset(center.x + r * 0.45f, center.y + r * 0.35f),
+                                            style = Stroke(width = 2.5.dp.toPx())
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Invisible spacer for the capture button area
+                    Spacer(modifier = Modifier.size(captureBtnSize))
+
+                    // Right midpoint box (Capture edge to Wall)
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconButton(
+                            modifier = Modifier
+                                .size(flipBtnSize)
+                                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape),
+                            onClick = { cameraViewModel.toggleLensFacing() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.FlipCameraAndroid,
+                                contentDescription = "Flip camera",
+                                tint = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier
+                                    .size(flipBtnSize * 0.6f) // Proportional icon size
+                                    .graphicsLayer { rotationZ = animatedRotation }
+                            )
+                        }
                     }
                 }
             }
 
-            // Capture Button
+            // Actual Capture Button at the physical center
             IconButton(
                 modifier = Modifier
-                    .size(110.dp)
+                    .size(captureBtnSize)
                     .border(5.dp, MaterialTheme.colorScheme.onBackground, CircleShape),
                 onClick = {
                     if (cameraUiState.isCapturing || cameraUiState.remainingSeconds > 0) return@IconButton
@@ -629,45 +697,30 @@ fun CameraView(
                     contentDescription = "Capture photo",
                     tint = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(captureBtnSize * 0.7f) // Proportional icon size
                         .graphicsLayer { rotationZ = animatedRotation }
-                )
-            }
-
-            // Flip Button
-            IconButton(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 48.dp)
-                    .size(48.dp)
-                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape),
-                onClick = { cameraViewModel.toggleLensFacing() }
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.FlipCameraAndroid,
-                    contentDescription = "Flip camera",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.graphicsLayer { rotationZ = animatedRotation }
                 )
             }
         }
 
         // Capture Animation Overlay
-        if (animProgress.value > 0f && cameraUiState.lastCapturedUri != null) {
+        if (animProgress.value > 0f && cameraUiState.lastCapturedUri != null && containerSize.width > 0) {
             val t = animProgress.value
             val currentX = lerp(screenCenter.x, buttonPosition.x, t)
             val currentY = lerp(screenCenter.y, buttonPosition.y, t)
             val currentScale = lerp(0.8f, 0.1f, t)
             val currentAlpha = lerp(1f, 0f, t)
+            
+            val animSize = (containerSize.width * 0.8f).coerceAtMost(400f)
 
             AsyncImage(
                 model = cameraUiState.lastCapturedUri,
                 contentDescription = null,
                 modifier = Modifier
-                    .size(400.dp)
+                    .size(with(LocalDensity.current) { animSize.toDp() })
                     .graphicsLayer {
-                        translationX = currentX - (400.dp.toPx() / 2f)
-                        translationY = currentY - (400.dp.toPx() / 2f)
+                        translationX = currentX - (animSize / 2f)
+                        translationY = currentY - (animSize / 2f)
                         scaleX = currentScale
                         scaleY = currentScale
                         alpha = currentAlpha

@@ -4,12 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -26,9 +29,9 @@ import com.crcleapp.crcle.ui.views.BugReportView
 import com.crcleapp.crcle.ui.views.CameraView
 import com.crcleapp.crcle.ui.views.CircleView
 import com.crcleapp.crcle.ui.views.HomeView
-import com.crcleapp.crcle.ui.views.ProfileView
 import com.crcleapp.crcle.ui.views.CircleSettingsView
 import com.crcleapp.crcle.ui.views.FriendsView
+import com.crcleapp.crcle.ui.views.ProfileView
 import com.crcleapp.crcle.ui.views.SettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
@@ -48,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 isDarkMode = isDarkMode
             ) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppNavigation()
+                    AppNavigation(mainViewModel)
                 }
             }
         }
@@ -57,10 +60,13 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AppNavigation() {
+fun AppNavigation(mainViewModel: MainViewModel) {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
+    
+    // Use null as initial state to detect when preference is actually loaded from DataStore
+    val openOnHomePref by mainViewModel.openOnHome.collectAsState(initial = null)
 
     // Track authentication state reactively
     var currentUser by remember { mutableStateOf(auth.currentUser) }
@@ -75,7 +81,7 @@ fun AppNavigation() {
         }
     }
 
-    // Determine the start destination once based on initial state.
+    // Determine the start destination based on initial state.
     val startDest = if (currentUser != null) "main" else "auth"
 
     // Guard the app: if auth state becomes null, immediately push to auth screen
@@ -108,7 +114,7 @@ fun AppNavigation() {
             arguments = listOf(
                 navArgument("startPage") {
                     type = NavType.IntType
-                    defaultValue = 0 
+                    defaultValue = -1 
                 },
                 navArgument("circleId") {
                     type = NavType.StringType
@@ -117,53 +123,71 @@ fun AppNavigation() {
             )
         ) { backStackEntry ->
             val homeViewModel: HomeViewModel = viewModel()
-            val startPage = backStackEntry.arguments?.getInt("startPage") ?: 0
-            val circleId = backStackEntry.arguments?.getString("circleId")
-            val pagerState = rememberPagerState(initialPage = startPage) { 3 }
+            val argStartPage = backStackEntry.arguments?.getInt("startPage") ?: -1
+            
+            // Wait until preference is loaded before rendering the pager
+            if (openOnHomePref == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                // If startPage wasn't provided in nav args, use the user preference.
+                // 0 = Camera, 1 = Home. Default pref is false -> Camera(0).
+                val initialPage = if (argStartPage == -1) {
+                    if (openOnHomePref == true) 1 else 0
+                } else {
+                    argStartPage
+                }
+                
+                val circleId = backStackEntry.arguments?.getString("circleId")
+                // key(openOnHomePref) is not needed here because the 'else' block
+                // only triggers once openOnHomePref is non-null.
+                val pagerState = rememberPagerState(initialPage = initialPage) { 3 }
 
-            HorizontalPager(state = pagerState) { page ->
-                when (page) {
-                    0 -> CameraView(
-                        homeViewModel = homeViewModel,
-                        entryPointCircleId = circleId,
-                        onCancel = {
-                            if (circleId != null) {
-                                navController.popBackStack()
-                            } else {
-                                coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                HorizontalPager(state = pagerState) { page ->
+                    when (page) {
+                        0 -> CameraView(
+                            homeViewModel = homeViewModel,
+                            entryPointCircleId = circleId,
+                            onCancel = {
+                                if (circleId != null) {
+                                    navController.popBackStack()
+                                } else {
+                                    coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                                }
+                            },
+                            onUploadsComplete = {},
+                            onUploadFailed = { _, _ -> }
+                        )
+
+                        1 -> HomeView(
+                            homeViewModel = homeViewModel,
+                            onCircleClick = { newCircleId ->
+                                navController.navigate("circle/$newCircleId")
+                            },
+                            onJoinCircle = { newCircleId ->
+                                navController.navigate("circle/$newCircleId")
+                            },
+                            onCreateCircle = { newCircleId ->
+                                navController.navigate("circle/$newCircleId")
+                            },
+                            onInvitesClick = {
+                                navController.navigate("friends?tab=2")
                             }
-                        },
-                        onUploadsComplete = {},
-                        onUploadFailed = { _, _ -> }
-                    )
+                        )
 
-                    1 -> HomeView(
-                        homeViewModel = homeViewModel,
-                        onCircleClick = { newCircleId ->
-                            navController.navigate("circle/$newCircleId")
-                        },
-                        onJoinCircle = { newCircleId ->
-                            navController.navigate("circle/$newCircleId")
-                        },
-                        onCreateCircle = { newCircleId ->
-                            navController.navigate("circle/$newCircleId")
-                        },
-                        onInvitesClick = {
-                            navController.navigate("friends?tab=2")
-                        }
-                    )
-
-                    2 -> ProfileView(
-                        onLogout = {
-                            auth.signOut()
-                        },
-                        onFriendsClick = {
-                            navController.navigate("friends")
-                        },
-                        onSettingsClick = {
-                            navController.navigate("settings")
-                        }
-                    )
+                        2 -> ProfileView(
+                            onLogout = {
+                                auth.signOut()
+                            },
+                            onFriendsClick = {
+                                navController.navigate("friends")
+                            },
+                            onSettingsClick = {
+                                navController.navigate("settings")
+                            }
+                        )
+                    }
                 }
             }
         }

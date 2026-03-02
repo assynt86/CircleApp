@@ -6,7 +6,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -55,13 +57,12 @@ fun ProfileView(
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.95f))
                     .clickable { showFullScreenPhoto = false },
-                contentAlignment = Alignment.TopCenter
+                contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
                     model = uiState.photoUrl,
                     contentDescription = "Full Screen Profile Picture",
                     modifier = Modifier
-                        .padding(top = 100.dp)
                         .fillMaxWidth(0.9f)
                         .aspectRatio(1f)
                         .clip(CircleShape),
@@ -99,22 +100,13 @@ fun ProfileView(
     Scaffold(
         topBar = {
             TopAppBar(
-                modifier = Modifier.height(120.dp),
                 title = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .padding(start = 8.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            text = "Profile",
-                            fontFamily = LeagueSpartan,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 40.sp,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                    }
+                    Text(
+                        text = "Profile",
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 32.sp
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent
@@ -122,16 +114,20 @@ fun ProfileView(
             )
         }
     ) { paddingValues ->
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .padding(paddingValues)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp)
+        ) {
+            // Scrollable Content Section
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Box(
                     modifier = Modifier
@@ -177,11 +173,11 @@ fun ProfileView(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(60.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(32.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp) // Dynamic spacing reduced from 24dp to 16dp
                 ) {
                     EditableInfoLabel(
                         label = "Name",
@@ -205,51 +201,60 @@ fun ProfileView(
                         onToggleVisibility = { profileViewModel.togglePhoneVisibility() }
                     )
                 }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+            }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                Column(
+            // Bottom Anchored Buttons Section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = onFriendsClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .heightIn(min = 56.dp),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Button(
-                        onClick = onFriendsClick,
-                        modifier = Modifier.fillMaxWidth().height(60.dp),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(Icons.Default.Group, contentDescription = "Friends")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Friends", fontFamily = LeagueSpartan, fontSize = 20.sp)
-                    }
-                    
-                    Button(
-                        onClick = onSettingsClick,
-                        modifier = Modifier.fillMaxWidth().height(60.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Settings", fontFamily = LeagueSpartan, fontSize = 20.sp)
-                    }
-                    
-                    Button(
-                        onClick = onLogout,
-                        modifier = Modifier.fillMaxWidth().height(60.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
-                    ) {
-                        Icon(Icons.Default.Logout, contentDescription = "Log Out", tint = Color.Red)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Log Out", fontFamily = LeagueSpartan, color = Color.Red, fontSize = 20.sp)
-                    }
+                    Icon(Icons.Default.Group, contentDescription = "Friends")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Friends", fontFamily = LeagueSpartan, fontSize = 20.sp)
+                }
+                
+                Button(
+                    onClick = onSettingsClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Settings", fontFamily = LeagueSpartan, fontSize = 20.sp)
+                }
+                
+                Button(
+                    onClick = onLogout,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = "Log Out", tint = Color.Red)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Log Out", fontFamily = LeagueSpartan, color = Color.Red, fontSize = 20.sp)
                 }
             }
-            
-            if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        }
+        
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
             }
         }
     }
@@ -258,7 +263,10 @@ fun ProfileView(
 @Composable
 fun InfoLabel(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -271,7 +279,8 @@ fun InfoLabel(label: String, value: String) {
         Text(
             text = value,
             fontFamily = LeagueSpartan,
-            fontSize = 22.sp
+            fontSize = 22.sp,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -279,7 +288,10 @@ fun InfoLabel(label: String, value: String) {
 @Composable
 fun EditableInfoLabel(label: String, value: String, onEditClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -313,7 +325,10 @@ fun CensoredInfoLabel(
     onToggleVisibility: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
