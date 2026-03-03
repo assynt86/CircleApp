@@ -74,22 +74,10 @@ class AuthRepository(
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        val trimmedIdentifier = identifier.trim()
+        val email = identifier.trim()
 
-        when {
-            // Check if it's an email
-            trimmedIdentifier.contains("@") -> {
-                loginWithEmail(trimmedIdentifier, password, onSuccess, onError)
-            }
-            // Check if it's a phone number (basic check: contains only digits, +, -, spaces)
-            trimmedIdentifier.all { it.isDigit() || it == '+' || it == '-' || it == ' ' } -> {
-                findEmailAndLogin("phone", trimmedIdentifier, password, onSuccess, onError)
-            }
-            // Otherwise, assume it's a username
-            else -> {
-                findEmailAndLogin("username", trimmedIdentifier, password, onSuccess, onError)
-            }
-        }
+        // MVP: email/password only (no Firestore lookup before auth)
+        loginWithEmail(email, password, onSuccess, onError)
     }
 
     private fun loginWithEmail(

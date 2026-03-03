@@ -8,7 +8,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.example.circleapp" />
+                  <option name="appId" value="com.crcleapp.crcle" />
                   <option name="mobileSdkAppId" value="1:631435384274:android:c2674a13e3348cdd19640b" />
                   <option name="projectId" value="circleapp-e749a" />
                   <option name="projectNumber" value="631435384274" />
