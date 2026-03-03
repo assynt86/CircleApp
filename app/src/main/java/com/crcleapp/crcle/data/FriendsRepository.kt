@@ -231,10 +231,3 @@ class FriendsRepository {
             .addOnFailureListener { onError(it) }
     }
 }
-
-data class FriendRequest(
-    val id: String = "",
-    val senderUid: String = "",
-    val receiverUid: String = "",
-    val status: String = ""
-)

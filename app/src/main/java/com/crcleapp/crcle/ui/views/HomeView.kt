@@ -170,13 +170,15 @@ fun HomeViewContent(
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (uiState.pendingInvitesCount > 0) {
-                            IconButton(onClick = onInvitesClick) {
+                        IconButton(onClick = onInvitesClick) {
+                            if (uiState.pendingInvitesCount > 0) {
                                 BadgedBox(badge = {
                                     Badge { Text(uiState.pendingInvitesCount.toString()) }
                                 }) {
-                                    Icon(Icons.Filled.Notifications, contentDescription = "Pending Invites")
+                                    Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
                                 }
+                            } else {
+                                Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
                             }
                         }
                         IconButton(onClick = { onShowJoinCircleDialog(true) }) {

@@ -29,6 +29,10 @@ class UserRepository {
         db.collection("users").document(uid).update("autoAcceptInvites", enabled).await()
     }
 
+    suspend fun updateFcmToken(uid: String, token: String) {
+        db.collection("users").document(uid).update("fcmToken", token).await()
+    }
+
     suspend fun reportBug(description: String) {
         val uid = auth.currentUser?.uid ?: "anonymous"
         val device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (API ${android.os.Build.VERSION.SDK_INT})"

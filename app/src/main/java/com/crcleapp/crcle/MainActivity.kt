@@ -1,8 +1,14 @@
 package com.crcleapp.crcle
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,16 +20,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.crcleapp.crcle.data.UserRepository
 import com.crcleapp.crcle.ui.theme.CircleAppTheme
 import com.crcleapp.crcle.ui.viewmodels.BugReportViewModel
 import com.crcleapp.crcle.ui.viewmodels.HomeViewModel
 import com.crcleapp.crcle.ui.viewmodels.MainViewModel
+import com.crcleapp.crcle.ui.viewmodels.NotificationsViewModel
 import com.crcleapp.crcle.ui.views.BlockedUsersView
 import com.crcleapp.crcle.ui.views.BugReportView
 import com.crcleapp.crcle.ui.views.CameraView
@@ -31,12 +42,14 @@ import com.crcleapp.crcle.ui.views.CircleView
 import com.crcleapp.crcle.ui.views.HomeView
 import com.crcleapp.crcle.ui.views.CircleSettingsView
 import com.crcleapp.crcle.ui.views.FriendsView
+import com.crcleapp.crcle.ui.views.NotificationsView
 import com.crcleapp.crcle.ui.views.ProfileView
 import com.crcleapp.crcle.ui.views.SettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.crcleapp.crcle.ui.views.AuthView
 import com.crcleapp.crcle.ui.viewmodels.AuthViewModel
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,8 +64,50 @@ class MainActivity : ComponentActivity() {
                 isDarkMode = isDarkMode
             ) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    AppNavigation(mainViewModel)
+                    NotificationPermissionHandler()
+                    AppNavigation(mainViewModel, onUserAuthenticated = { updateFcmToken() })
                 }
+            }
+        }
+
+        updateFcmToken()
+    }
+
+    private fun updateFcmToken() {
+        val auth = FirebaseAuth.getInstance()
+        val uid = auth.currentUser?.uid ?: return
+        
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w("FCM", "Fetching FCM registration token failed", task.exception)
+                return@addOnCompleteListener
+            }
+
+            val token = task.result
+            lifecycleScope.launch {
+                UserRepository().updateFcmToken(uid, token)
+            }
+        }
+    }
+}
+
+@Composable
+fun NotificationPermissionHandler() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val context = LocalContext.current
+        val launcher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            // Permission result handled
+        }
+
+        LaunchedEffect(Unit) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }
@@ -60,7 +115,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AppNavigation(mainViewModel: MainViewModel) {
+fun AppNavigation(mainViewModel: MainViewModel, onUserAuthenticated: () -> Unit) {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
@@ -90,6 +145,8 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             navController.navigate("auth") {
                 popUpTo(0) { inclusive = true }
             }
+        } else {
+            onUserAuthenticated()
         }
     }
 
@@ -172,7 +229,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                                 navController.navigate("circle/$newCircleId")
                             },
                             onInvitesClick = {
-                                navController.navigate("friends?tab=2")
+                                navController.navigate("notifications")
                             }
                         )
 
@@ -280,6 +337,12 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                 onBack = { navController.popBackStack() },
                 initialTab = initialTab
             )
+        }
+
+        // -------- Notifications Log --------
+        composable("notifications") {
+            val notificationsViewModel: NotificationsViewModel = viewModel()
+            NotificationsView(onBack = { navController.popBackStack() }, notificationsViewModel = notificationsViewModel)
         }
     }
 }

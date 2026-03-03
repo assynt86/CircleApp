@@ -109,7 +109,8 @@ data class UserProfile(
     val displayName: String = "",
     val photoUrl: String = "",
     val createdAt: Timestamp? = null,
-    val autoAcceptInvites: Boolean = false
+    val autoAcceptInvites: Boolean = false,
+    val fcmToken: String? = null
 )
 
 data class CircleInvite(
@@ -122,4 +123,13 @@ data class CircleInvite(
     val inviterName: String = "",
     val status: String = "pending",
     val timestamp: Timestamp? = null
+)
+
+data class FriendRequest(
+    val id: String = "",
+    val senderUid: String = "",
+    val receiverUid: String = "",
+    val status: String = "",
+    val senderUsername: String? = null,
+    val receiverUsername: String? = null
 )
