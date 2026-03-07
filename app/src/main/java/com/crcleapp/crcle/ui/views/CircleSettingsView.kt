@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.crcleapp.crcle.data.CircleRepository
 import com.crcleapp.crcle.data.UserProfile
 import com.crcleapp.crcle.ui.theme.LeagueSpartan
 import com.crcleapp.crcle.ui.viewmodels.CircleSettingsViewModel
@@ -175,7 +176,57 @@ fun CircleSettingsView(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+            
+            // Storage Limit Section
+            uiState.circleInfo?.let { _ ->
+                val storageBytes = uiState.calculatedStorageBytes
+                val storageLimit = CircleRepository.STORAGE_LIMIT_BYTES
+                val storageUsedMb = storageBytes / (1024 * 1024)
+                val storageLimitMb = storageLimit / (1024 * 1024)
+                val storagePercentage = (storageBytes.toFloat() / storageLimit.toFloat()).coerceIn(0f, 1f)
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Storage Used", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold)
+                                if (uiState.isAdmin && uiState.isSyncingStorage) {
+                                    Spacer(Modifier.width(8.dp))
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                }
+                            }
+                            Text("$storageUsedMb MB / $storageLimitMb MB", fontFamily = LeagueSpartan, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { storagePercentage },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
+                            color = if (storagePercentage > 0.9f) Color.Red else MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${(storagePercentage * 100).toInt()}% Used",
+                            fontFamily = LeagueSpartan,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Gray,
+                            modifier = Modifier.align(Alignment.End)
+                        )
+                    }
+                }
+                
+                Spacer(Modifier.height(24.dp))
+            }
 
             // Members Section
             Row(
@@ -470,7 +521,7 @@ fun ReportUserDialog(
             ) { Text("Submit Report") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = { onDismiss() }) { Text("Cancel") }
         }
     )
 }

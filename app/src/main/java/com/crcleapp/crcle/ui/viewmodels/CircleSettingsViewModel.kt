@@ -32,7 +32,9 @@ data class CircleSettingsUiState(
     val currentUserName: String = "",
     val selectedMember: UserProfile? = null,
     val showUserActionDialog: Boolean = false,
-    val showReportDialog: Boolean = false
+    val showReportDialog: Boolean = false,
+    val isSyncingStorage: Boolean = false,
+    val calculatedStorageBytes: Long = 0L
 )
 
 class CircleSettingsViewModel(
@@ -46,10 +48,13 @@ class CircleSettingsViewModel(
     private val _uiState = MutableStateFlow(CircleSettingsUiState())
     val uiState: StateFlow<CircleSettingsUiState> = _uiState.asStateFlow()
 
+    private var hasSyncedStorageBytes = false
+
     init {
         loadCircleData()
         loadFriends()
         loadCurrentUser()
+        listenToPhotosForStorage()
     }
 
     private fun loadCurrentUser() {
@@ -74,6 +79,44 @@ class CircleSettingsViewModel(
             onError = { e ->
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
+        )
+    }
+
+    private fun listenToPhotosForStorage() {
+        repository.listenToPhotos(circleId,
+            onSuccess = { photos ->
+                var total = 0L
+                var hasMissingMetadata = false
+                photos.forEach { 
+                    if (it.sizeBytes > 0) {
+                        total += it.sizeBytes 
+                    } else {
+                        hasMissingMetadata = true
+                    }
+                }
+                _uiState.update { it.copy(calculatedStorageBytes = total) }
+                
+                // Keep database storageBytes in sync with calculated total (Admin only)
+                if (_uiState.value.isAdmin) {
+                    val currentDbBytes = _uiState.value.circleInfo?.storageBytes ?: 0L
+                    
+                    // If some photos are missing metadata, trigger a full heal sync
+                    if (hasMissingMetadata && !hasSyncedStorageBytes) {
+                        hasSyncedStorageBytes = true
+                        syncStorage()
+                    } 
+                    // Otherwise, if the totals don't match, update the circle document directly
+                    else if (!hasMissingMetadata && currentDbBytes != total) {
+                        // Avoid constant updates if it's just lagging slightly, but here we want accuracy.
+                        // We use a small threshold or just update.
+                        // To avoid infinite loops or fighting with other clients, only update if significant difference or once?
+                        // Actually, if we use atomic increments elsewhere, this shouldn't drift much.
+                        // But if it does, we correct it.
+                        repository.updateCircleStorageBytes(circleId, total)
+                    }
+                }
+            },
+            onError = { /* Handle error */ }
         )
     }
 
@@ -104,6 +147,13 @@ class CircleSettingsViewModel(
                     _uiState.update { it.copy(friends = friends) }
                 }, {})
             }
+        }
+    }
+
+    fun syncStorage() {
+        _uiState.update { it.copy(isSyncingStorage = true) }
+        repository.syncCircleStorage(circleId) {
+            _uiState.update { it.copy(isSyncingStorage = false) }
         }
     }
 

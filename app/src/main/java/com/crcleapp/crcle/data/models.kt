@@ -17,6 +17,7 @@ data class Circle(
     val cleanedUp: Boolean = false,
     val status: String = "open",
     val backgroundUrl: String? = null,
+    val storageBytes: Long = 0L,
     @get:Exclude var previewUrl: String? = null
 ) {
     @get:Exclude
@@ -64,6 +65,7 @@ data class Photo(
     @DocumentId val id: String = "",
     val uploaderUid: String = "",
     val storagePath: String = "",
+    val sizeBytes: Long = 0L,
     val createdAt: Timestamp? = null
 )
 
@@ -74,7 +76,8 @@ data class CircleInfo(
     val closeAt: Timestamp?,
     val deleteAt: Timestamp? = null,
     val ownerUid: String,
-    val backgroundUrl: String? = null
+    val backgroundUrl: String? = null,
+    val storageBytes: Long = 0L
 ) {
     val isClosed: Boolean
         get() {
@@ -97,6 +100,7 @@ data class PhotoItem(
     val uploaderUid: String,
     val storagePath: String,
     val createdAt: Timestamp?,
+    val sizeBytes: Long = 0L,
     var downloadUrl: String? = null,
     var uploaderName: String? = null
 )
