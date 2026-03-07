@@ -1,7 +1,9 @@
 package com.crcleapp.crcle.ui.views
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -50,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -70,6 +73,7 @@ fun SettingsView(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -129,9 +133,9 @@ fun SettingsView(
                 }
                 item {
                     SettingsToggleRow(
-                        label = "Open on Home instead of Camera",
-                        checked = uiState.openOnHome,
-                        onCheckedChange = { viewModel.toggleOpenOnHome(it) }
+                        label = "Launch on Camera instead of Home",
+                        checked = uiState.launchOnCamera,
+                        onCheckedChange = { viewModel.toggleLaunchOnCamera(it) }
                     )
                 }
 
@@ -190,7 +194,9 @@ fun SettingsView(
                 item {
                     SettingsClickableRow(
                         label = "Privacy Policy",
-                        onClick = { /* Implement later */ }
+                        onClick = { 
+                            uriHandler.openUri("https://assynt86.github.io/CircleApp/privacy.html")
+                        }
                     )
                 }
 

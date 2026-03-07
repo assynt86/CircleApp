@@ -22,7 +22,7 @@ data class SettingsUiState(
     val useSystemTheme: Boolean = true,
     val isDarkMode: Boolean = true,
     val autoAcceptInvites: Boolean = false,
-    val openOnHome: Boolean = false,
+    val launchOnCamera: Boolean = false,
     val notificationsEnabled: Boolean = true,
     val blockedUsers: List<UserProfile> = emptyList(),
     val isLoading: Boolean = false,
@@ -67,8 +67,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
         viewModelScope.launch {
-            circlePreferences.openOnHomeFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(openOnHome = enabled) }
+            circlePreferences.launchOnCameraFlow.collectLatest { enabled ->
+                _uiState.update { it.copy(launchOnCamera = enabled) }
             }
         }
         viewModelScope.launch {
@@ -129,9 +129,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun toggleOpenOnHome(enabled: Boolean) {
+    fun toggleLaunchOnCamera(enabled: Boolean) {
         viewModelScope.launch {
-            circlePreferences.setOpenOnHome(enabled)
+            circlePreferences.setLaunchOnCamera(enabled)
         }
     }
 

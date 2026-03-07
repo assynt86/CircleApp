@@ -43,6 +43,7 @@ import com.crcleapp.crcle.ui.components.ZoomableImage
 import com.crcleapp.crcle.ui.viewmodels.CircleUiState
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModel
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModelFactory
+import com.crcleapp.crcle.ui.theme.LeagueSpartan
 
 @Composable
 fun CircleView(
@@ -117,8 +118,24 @@ fun CircleViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.circleInfo?.name ?: "Circle") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                title = {
+                    Text(
+                        text = uiState.circleInfo?.name ?: "Circle",
+                        modifier = Modifier.clickable { onSettingsClick() },
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp
+                    )
+                },
+                navigationIcon = { 
+                    TextButton(onClick = onBack) { 
+                        Text(
+                            "Back",
+                            fontFamily = LeagueSpartan,
+                            fontWeight = FontWeight.Medium
+                        ) 
+                    } 
+                },
                 actions = {
                     if (uiState.inSelectionMode) {
                         val canDeleteAll = !isClosed && uiState.selectedPhotos.isNotEmpty() && uiState.selectedPhotos.all { id ->
@@ -139,21 +156,12 @@ fun CircleViewContent(
                             Icon(Icons.Filled.Cancel, contentDescription = "Cancel Selection")
                         }
                     } else {
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                        }
                         IconButton(onClick = { onShowInviteDialog(true) }) {
                             Icon(Icons.Filled.GroupAdd, contentDescription = "Invite People")
                         }
-                        IconButton(onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onToggleSelectionMode()
-                        }) {
-                            Icon(Icons.Filled.Checklist, contentDescription = "Select Photos")
-                        }
                         if (!isClosed) {
                             IconButton(onClick = onUploadPhoto) {
-                                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
+                                Icon(Icons.Filled.FileUpload, contentDescription = "Upload Photo")
                             }
                         }
                     }
@@ -173,13 +181,11 @@ fun CircleViewContent(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
                             Spacer(Modifier.height(8.dp))
-                            Text("Loading circle...")
+                            Text("Loading circle...", fontFamily = LeagueSpartan)
                         }
                     }
                     return@Column
                 }
-
-                val info = uiState.circleInfo
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -189,38 +195,47 @@ fun CircleViewContent(
                     Text(
                         text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isClosed) Color.Gray else Color(0xFF4CAF50)
+                        color = if (isClosed) Color.Gray else Color(0xFF4CAF50),
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.SemiBold
                     )
 
                     if (!isClosed) {
                         Text(
                             text = "Closes in: ${uiState.remainingTime}",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = LeagueSpartan
                         )
                     } else if (uiState.deleteInTime.isNotEmpty()) {
                         Text(
                             text = "Deletes in: ${uiState.deleteInTime}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
+                            color = Color.Gray,
+                            fontFamily = LeagueSpartan
                         )
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("Photos (${uiState.photos.size})", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Photos (${uiState.photos.size})", 
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = LeagueSpartan,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(Modifier.height(8.dp))
 
                 if (uiState.isUploading) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Uploading...", style = MaterialTheme.typography.bodySmall)
+                        Text("Uploading...", style = MaterialTheme.typography.bodySmall, fontFamily = LeagueSpartan)
                     }
                     Spacer(Modifier.height(8.dp))
                 }
 
                 if (uiState.photos.isEmpty()) {
-                    Text("No photos yet.")
+                    Text("No photos yet.", fontFamily = LeagueSpartan)
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
@@ -308,7 +323,7 @@ fun CircleViewContent(
     if (uiState.showInviteDialog && uiState.circleInfo != null) {
         AlertDialog(
             onDismissRequest = { onShowInviteDialog(false) },
-            title = { Text("Invite to ${uiState.circleInfo?.name}") },
+            title = { Text("Invite to ${uiState.circleInfo?.name}", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
             text = {
                 val inviteCode = uiState.circleInfo!!.inviteCode
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -328,12 +343,12 @@ fun CircleViewContent(
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    Text(inviteCode, style = MaterialTheme.typography.headlineLarge, letterSpacing = 5.sp)
+                    Text(inviteCode, style = MaterialTheme.typography.headlineLarge, letterSpacing = 5.sp, fontFamily = LeagueSpartan)
                 }
             },
             confirmButton = {
                 TextButton(onClick = { onShowInviteDialog(false) }) {
-                    Text("Close")
+                    Text("Close", fontFamily = LeagueSpartan)
                 }
             }
         )
@@ -370,7 +385,7 @@ fun CircleViewContent(
                         contentDescription = "Full screen image",
                         isCurrentPage = pagerState.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
                         onTap = { onSetFullscreenImage(null) }
                     )
                 }
@@ -413,7 +428,8 @@ fun CircleViewContent(
                                 Text(
                                     text = uploader.username.ifEmpty { uploader.displayName },
                                     color = Color.White,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = LeagueSpartan
                                 )
                             }
                         }

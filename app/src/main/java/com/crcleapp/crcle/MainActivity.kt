@@ -66,7 +66,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     val auth = FirebaseAuth.getInstance()
     
     // Use null as initial state to detect when preference is actually loaded from DataStore
-    val openOnHomePref by mainViewModel.openOnHome.collectAsState(initial = null)
+    val launchOnCameraPref by mainViewModel.launchOnCamera.collectAsState(initial = null)
 
     // Track authentication state reactively
     var currentUser by remember { mutableStateOf(auth.currentUser) }
@@ -126,22 +126,19 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             val argStartPage = backStackEntry.arguments?.getInt("startPage") ?: -1
             
             // Wait until preference is loaded before rendering the pager
-            if (openOnHomePref == null) {
+            if (launchOnCameraPref == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
-                // If startPage wasn't provided in nav args, use the user preference.
-                // 0 = Camera, 1 = Home. Default pref is false -> Camera(0).
+                // Default to Home (1) unless preference is set to launch on Camera (0)
                 val initialPage = if (argStartPage == -1) {
-                    if (openOnHomePref == true) 1 else 0
+                    if (launchOnCameraPref == true) 0 else 1
                 } else {
                     argStartPage
                 }
                 
                 val circleId = backStackEntry.arguments?.getString("circleId")
-                // key(openOnHomePref) is not needed here because the 'else' block
-                // only triggers once openOnHomePref is non-null.
                 val pagerState = rememberPagerState(initialPage = initialPage) { 3 }
 
                 HorizontalPager(state = pagerState) { page ->
@@ -173,6 +170,12 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                             },
                             onInvitesClick = {
                                 navController.navigate("friends?tab=2")
+                            },
+                            onCameraClick = {
+                                coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                            },
+                            onProfileClick = {
+                                coroutineScope.launch { pagerState.animateScrollToPage(2) }
                             }
                         )
 

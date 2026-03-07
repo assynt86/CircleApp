@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +39,6 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -61,7 +62,9 @@ fun HomeView(
     onCircleClick: (String) -> Unit,
     onJoinCircle: (String) -> Unit,
     onCreateCircle: (String) -> Unit,
-    onInvitesClick: () -> Unit
+    onInvitesClick: () -> Unit,
+    onCameraClick: () -> Unit,
+    onProfileClick: () -> Unit
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -85,12 +88,15 @@ fun HomeView(
             onNewCircleNameChange = { homeViewModel.onNewCircleNameChange(it) },
             onNewCircleDurationChange = { homeViewModel.onNewCircleDurationChange(it) },
             onInviteCodeChange = { homeViewModel.onInviteCodeChange(it) },
-            onInvitesClick = onInvitesClick
+            onInvitesClick = onInvitesClick,
+            onCameraClick = onCameraClick,
+            onProfileClick = onProfileClick,
+            onImageLoaded = { homeViewModel.onImageLoaded() }
         )
 
-        // Full screen loading overlay
+        // Splash screen visible until ViewModel flags it as ready
         AnimatedVisibility(
-            visible = uiState.isLoading && uiState.circles.isEmpty(),
+            visible = !uiState.isReady,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
@@ -144,7 +150,10 @@ fun HomeViewContent(
     onNewCircleNameChange: (String) -> Unit,
     onNewCircleDurationChange: (Float) -> Unit,
     onInviteCodeChange: (String) -> Unit,
-    onInvitesClick: () -> Unit
+    onInvitesClick: () -> Unit,
+    onCameraClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    onImageLoaded: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -155,7 +164,7 @@ fun HomeViewContent(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.app_logo),
@@ -182,119 +191,190 @@ fun HomeViewContent(
                         IconButton(onClick = { onShowJoinCircleDialog(true) }) {
                             Icon(Icons.Filled.GroupAdd, contentDescription = "Join Circle")
                         }
-                        IconButton(onClick = { onShowCreateCircleDialog(true) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Create Circle")
-                        }
                     }
                 }
             }
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            Text(
-                "Your circles", 
-                style = MaterialTheme.typography.titleMedium,
-                fontFamily = LeagueSpartan,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(16.dp))
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    "Your circles", 
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = LeagueSpartan,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(16.dp))
 
-            if (uiState.circles.isEmpty() && !uiState.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No circles yet. Create or join one!", fontFamily = LeagueSpartan)
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    items(uiState.circles) { circle ->
-                        val baseColor = when {
-                            circle.isClosed -> Color.Gray
-                            circle.isExpiringSoon -> Color(0xFFF44336) // Red
-                            else -> Color(0xFF4CAF50) // Green
-                        }
-                        val progress = circle.remainingProgress
-
-                        Box(
-                            modifier = Modifier
-                                .clickable { onCircleClick(circle.id) }
-                                .aspectRatio(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Draw dynamic progress border
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                val strokeWidth = 4.dp.toPx()
-                                val diameter = size.minDimension - strokeWidth
-                                
-                                // Faded background circle (elapsed time)
-                                drawCircle(
-                                    color = baseColor.copy(alpha = 0.3f),
-                                    radius = diameter / 2,
-                                    style = Stroke(width = strokeWidth)
-                                )
-                                
-                                // Solid progress arc (remaining time)
-                                drawArc(
-                                    color = baseColor,
-                                    startAngle = -90f,
-                                    sweepAngle = 360f * progress,
-                                    useCenter = false,
-                                    topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
-                                    size = Size(diameter, diameter),
-                                    style = Stroke(width = strokeWidth)
-                                )
+                if (uiState.circles.isEmpty() && !uiState.isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No circles yet. Create or join one!", fontFamily = LeagueSpartan)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 160.dp)
+                    ) {
+                        items(uiState.circles) { circle ->
+                            val baseColor = when {
+                                circle.isClosed -> Color.Gray
+                                circle.isExpiringSoon -> Color(0xFFF44336) // Red
+                                else -> Color(0xFF4CAF50) // Green
                             }
+                            val progress = circle.remainingProgress
 
-                            Card(
-                                shape = CircleShape,
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(6.dp) // Inset to leave room for border
+                                    .clickable { onCircleClick(circle.id) }
+                                    .aspectRatio(1f),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val strokeWidth = 4.dp.toPx()
+                                    val diameter = size.minDimension - strokeWidth
+                                    
+                                    drawCircle(
+                                        color = baseColor.copy(alpha = 0.3f),
+                                        radius = diameter / 2,
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                    
+                                    drawArc(
+                                        color = baseColor,
+                                        startAngle = -90f,
+                                        sweepAngle = 360f * progress,
+                                        useCenter = false,
+                                        topLeft = Offset(strokeWidth / 2, strokeWidth / 2),
+                                        size = Size(diameter, diameter),
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                }
+
+                                Card(
+                                    shape = CircleShape,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.surface),
-                                    contentAlignment = Alignment.Center
+                                        .padding(6.dp)
                                 ) {
-                                    if (circle.previewUrl != null) {
-                                        AsyncImage(
-                                            model = circle.previewUrl,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .alpha(0.5f),
-                                            contentScale = ContentScale.Crop
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.surface),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (circle.previewUrl != null) {
+                                            AsyncImage(
+                                                model = circle.previewUrl,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .alpha(0.5f),
+                                                contentScale = ContentScale.Crop,
+                                                onSuccess = { onImageLoaded() },
+                                                onError = { onImageLoaded() }
+                                            )
+                                        } else {
+                                            // Handle circles with no images
+                                            LaunchedEffect(circle.id) {
+                                                onImageLoaded()
+                                            }
+                                        }
+
+                                        Text(
+                                            text = circle.name,
+                                            modifier = Modifier.padding(12.dp),
+                                            textAlign = TextAlign.Center,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.titleLarge.copy(
+                                                fontSize = 24.sp,
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
+                                            fontFamily = LeagueSpartan,
+                                            softWrap = true,
+                                            maxLines = 2
                                         )
                                     }
-
-                                    Text(
-                                        text = circle.name,
-                                        modifier = Modifier.padding(12.dp),
-                                        textAlign = TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        style = MaterialTheme.typography.titleLarge.copy(
-                                            fontSize = 24.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        ),
-                                        fontFamily = LeagueSpartan,
-                                        softWrap = true,
-                                        maxLines = 2
-                                    )
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            // --- NAVIGATION UI ---
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.95f))
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .height(80.dp)
+            ) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    // Left side (Camera)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { onCameraClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoCamera,
+                            contentDescription = "Camera",
+                            modifier = Modifier.size(36.dp),
+                            tint = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(110.dp))
+
+                    // Right side (Profile)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable { onProfileClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Profile",
+                            modifier = Modifier.size(36.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+
+            // Elevated "Create Circle" Button
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = 32.dp)
+                    .size(90.dp) // Slightly smaller from 110.dp
+                    .border(4.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                    .padding(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onShowCreateCircleDialog(true) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Create Circle",
+                    modifier = Modifier.size(48.dp), // Slightly smaller from 54.dp
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -378,7 +458,6 @@ fun HomeViewContent(
                                     }
                                 }
                             )
-                            // Add circular trace overlay
                             val traceColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             Canvas(modifier = Modifier.fillMaxSize()) {
                                 drawCircle(
@@ -412,7 +491,7 @@ fun HomeViewContent(
                         BasicTextField(
                             value = uiState.joinInviteCode,
                             onValueChange = onInviteCodeChange,
-                            decorationBox = { innerTextField ->
+                            decorationBox = { _ ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     for (index in 0 until 6) {
                                         val char = uiState.joinInviteCode.getOrNull(index)
