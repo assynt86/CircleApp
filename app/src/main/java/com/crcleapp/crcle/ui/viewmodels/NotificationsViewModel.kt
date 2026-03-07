@@ -1,12 +1,15 @@
 package com.crcleapp.crcle.ui.viewmodels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.crcleapp.crcle.data.NotificationLog
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Date
 
 data class NotificationsUiState(
     val notifications: List<NotificationLog> = emptyList(),
@@ -28,11 +31,19 @@ class NotificationsViewModel : ViewModel() {
         val uid = auth.currentUser?.uid ?: return
         _uiState.value = _uiState.value.copy(isLoading = true)
 
+        // Path: users/{uid}/notifications
         db.collection("users").document(uid).collection("notifications")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("NotificationsVM", "Listen failed.", error)
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    return@addSnapshotListener
+                }
+
                 if (snapshot != null) {
+                    Log.d("NotificationsVM", "Received ${snapshot.size()} notifications")
                     val logs = snapshot.toObjects(NotificationLog::class.java)
                     _uiState.value = NotificationsUiState(notifications = logs, isLoading = false)
                 } else {
@@ -49,6 +60,25 @@ class NotificationsViewModel : ViewModel() {
                 val batch = db.batch()
                 snapshot.documents.forEach { batch.delete(it.reference) }
                 batch.commit()
+            }
+    }
+
+    fun sendManualTestPing() {
+        val uid = auth.currentUser?.uid ?: return
+        val logData = hashMapOf(
+            "title" to "Manual Test Ping",
+            "body" to "Triggered from the app at ${Date()}",
+            "timestamp" to FieldValue.serverTimestamp(),
+            "type" to "test_ping"
+        )
+        
+        db.collection("users").document(uid).collection("notifications")
+            .add(logData)
+            .addOnSuccessListener {
+                Log.d("NotificationsVM", "Manual ping added successfully")
+            }
+            .addOnFailureListener {
+                Log.e("NotificationsVM", "Failed to add manual ping", it)
             }
     }
 }

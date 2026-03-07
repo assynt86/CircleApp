@@ -1,6 +1,7 @@
 package com.crcleapp.crcle.data
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
@@ -16,7 +17,10 @@ class FriendsRepository {
         val senderUid = currentUid ?: return onError(Exception("Not signed in"))
 
         // Lookup user by username in user_public
-        db.collection("user_public").whereEqualTo("username", username.trim()).limit(1).get()
+        db.collection("user_public")
+            .whereEqualTo("username", username.trim())
+            .limit(1)
+            .get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
                     onNotFound()
@@ -28,8 +32,7 @@ class FriendsRepository {
                     return@addOnSuccessListener
                 }
 
-                // Check if already friends or blocked (this still needs to check 'users' or a private collection,
-                // but usually the sender can check their own 'friends' list)
+                // Check our own friends/blocked lists first
                 db.collection("users").document(senderUid).get().addOnSuccessListener { senderDoc ->
                     val friends = senderDoc.get("friends") as? List<String> ?: emptyList()
                     val blocked = senderDoc.get("blockedUsers") as? List<String> ?: emptyList()
@@ -43,42 +46,27 @@ class FriendsRepository {
                         return@addOnSuccessListener
                     }
 
-                    // Check if receiver blocked sender (this is tricky with strict rules,
-                    // but usually you can try to write a request and let rules reject it,
-                    // or keep this check if rules allow reading the 'blockedUsers' field under certain conditions)
-                    db.collection("users").document(receiverUid).get().addOnSuccessListener { receiverDoc ->
-                        val receiverBlocked = receiverDoc.get("blockedUsers") as? List<String> ?: emptyList()
-                        if (senderUid in receiverBlocked) {
-                            onNotFound() // Hide existence if blocked
-                            return@addOnSuccessListener
+                    // Attempt to create the request. If the receiver has blocked the sender, 
+                    // the Firestore security rules should handle the rejection.
+                    val requestData = hashMapOf(
+                        "senderUid" to senderUid,
+                        "receiverUid" to receiverUid,
+                        "status" to "pending",
+                        "timestamp" to FieldValue.serverTimestamp()
+                    )
+
+                    db.collection("friend_requests").add(requestData)
+                        .addOnSuccessListener { onSuccess() }
+                        .addOnFailureListener { e -> 
+                            // If permission denied, it might mean the receiver has blocked us
+                            if (e.message?.contains("PERMISSION_DENIED") == true) {
+                                // We treat this as not found to avoid leaking block status
+                                onNotFound()
+                            } else {
+                                onError(e)
+                            }
                         }
-
-                        val requestData = hashMapOf(
-                            "senderUid" to senderUid,
-                            "receiverUid" to receiverUid,
-                            "status" to "pending",
-                            "timestamp" to FieldValue.serverTimestamp()
-                        )
-
-                        db.collection("friend_requests").add(requestData)
-                            .addOnSuccessListener { onSuccess() }
-                            .addOnFailureListener { onError(it) }
-                    }.addOnFailureListener {
-                        // If we can't read the receiver's doc due to rules, we can just proceed with sending the request
-                        // and let the security rules for 'friend_requests' handle the logic.
-                        // For now, let's assume we can read it or handle it in rules.
-                        val requestData = hashMapOf(
-                            "senderUid" to senderUid,
-                            "receiverUid" to receiverUid,
-                            "status" to "pending",
-                            "timestamp" to FieldValue.serverTimestamp()
-                        )
-
-                        db.collection("friend_requests").add(requestData)
-                            .addOnSuccessListener { onSuccess() }
-                            .addOnFailureListener { onError(it) }
-                    }
-                }
+                }.addOnFailureListener { onError(it) }
             }
             .addOnFailureListener { onError(it) }
     }
@@ -117,7 +105,8 @@ class FriendsRepository {
                             id = doc.id,
                             senderUid = doc.getString("senderUid") ?: "",
                             receiverUid = doc.getString("receiverUid") ?: "",
-                            status = doc.getString("status") ?: "pending"
+                            status = doc.getString("status") ?: "pending",
+                            timestamp = doc.getTimestamp("timestamp")
                         )
                     }
                     trySend(requests)
@@ -138,7 +127,8 @@ class FriendsRepository {
                             id = doc.id,
                             senderUid = doc.getString("senderUid") ?: "",
                             receiverUid = doc.getString("receiverUid") ?: "",
-                            status = doc.getString("status") ?: "pending"
+                            status = doc.getString("status") ?: "pending",
+                            timestamp = doc.getTimestamp("timestamp")
                         )
                     }
                     trySend(requests)
@@ -206,7 +196,7 @@ class FriendsRepository {
         val targetRef = db.collection("users").document(targetUid)
         batch.update(targetRef, "friends", FieldValue.arrayRemove(uid))
 
-        // Delete any pending requests between them
+        // Find requests to delete
         db.collection("friend_requests")
             .whereIn("senderUid", listOf(uid, targetUid))
             .get()
@@ -238,19 +228,26 @@ class FriendsRepository {
             onSuccess(emptyList())
             return
         }
-        // Read from user_public
-        db.collection("user_public").whereIn("uid", uids).get()
+        // Use FieldPath.documentId() to ensure we match based on the document key (UID),
+        // regardless of whether the 'uid' field exists inside the document.
+        db.collection("user_public")
+            .whereIn(FieldPath.documentId(), uids)
+            .get()
             .addOnSuccessListener { snapshot ->
-                onSuccess(snapshot.toObjects(UserProfile::class.java))
+                // Note: toObject might fail to set 'uid' if it's missing in the doc body,
+                // so we manually ensure the ID is set from the document ID.
+                val users = snapshot.documents.mapNotNull { doc ->
+                    doc.toObject(UserProfile::class.java)?.copy(uid = doc.id)
+                }
+                onSuccess(users)
             }
             .addOnFailureListener { onError(it) }
     }
 
     fun getUser(uid: String, onSuccess: (UserProfile?) -> Unit, onError: (Exception) -> Unit) {
-        // Read from user_public
         db.collection("user_public").document(uid).get()
             .addOnSuccessListener { snapshot ->
-                onSuccess(snapshot.toObject(UserProfile::class.java))
+                onSuccess(snapshot.toObject(UserProfile::class.java)?.copy(uid = snapshot.id))
             }
             .addOnFailureListener { onError(it) }
     }

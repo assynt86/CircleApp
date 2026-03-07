@@ -7,5 +7,6 @@ data class NotificationLog(
     @DocumentId val id: String = "",
     val title: String = "",
     val body: String = "",
-    val timestamp: Timestamp? = null
+    val timestamp: Timestamp? = null,
+    val type: String = ""
 )

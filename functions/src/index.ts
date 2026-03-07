@@ -1,8 +1,64 @@
 import {onSchedule} from "firebase-functions/v2/scheduler";
-import {onDocumentUpdated, onDocumentDeleted} from "firebase-functions/v2/firestore";
+import {onRequest} from "firebase-functions/v2/https";
+import {onDocumentUpdated, onDocumentDeleted, onDocumentCreated} from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 
 admin.initializeApp();
+
+/** Test function: Sends a notification to all users every 24 hours. */
+export const testNotificationPing = onSchedule("every 24 hours", async () => {
+  await sendTestPings();
+});
+
+/** Manual HTTP trigger to test notifications immediately without waiting for the schedule. */
+export const manualTestPing = onRequest(async (req, res) => {
+  await sendTestPings();
+  res.status(200).send("Test pings sent successfully.");
+});
+
+/**
+ * Sends a test notification log to all users and a push message to a test topic.
+ * @return {Promise<void>}
+ */
+async function sendTestPings() {
+  const db = admin.firestore();
+  const messaging = admin.messaging();
+
+  const usersSnap = await db.collection("users").get();
+
+  const now = admin.firestore.Timestamp.now();
+  const title = "Test Ping";
+  const body = `Periodic test notification at ${new Date().toLocaleTimeString()}`;
+
+  const promises: Promise<unknown>[] = [];
+
+  for (const userDoc of usersSnap.docs) {
+    const uid = userDoc.id;
+    // 1) Add to Notification Log in Firestore
+    promises.push(
+      db.collection("users").doc(uid).collection("notifications").add({
+        title: title,
+        body: body,
+        timestamp: now,
+        type: "test_ping",
+      })
+    );
+  }
+
+  // 2) Send FCM Push Notification to the "test_notifications" topic
+  const message = {
+    notification: {
+      title: title,
+      body: body,
+    },
+    topic: "test_notifications",
+  };
+
+  promises.push(messaging.send(message));
+
+  await Promise.all(promises);
+  console.log(`Sent test ping to ${usersSnap.size} users and topic.`);
+}
 
 export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => {
   const db = admin.firestore();
@@ -44,6 +100,42 @@ export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => 
   }
 });
 
+export const onFriendRequestCreated = onDocumentCreated(
+  "friend_requests/{requestId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const receiverUid = data.receiverUid;
+    const senderUid = data.senderUid;
+
+    const db = admin.firestore();
+    const senderSnap = await db.doc(`user_public/${senderUid}`).get();
+    const senderName = senderSnap.data()?.username || "Someone";
+
+    const title = "New Friend Request";
+    const body = `${senderName} sent you a friend request.`;
+
+    // 1) Log to Firestore
+    await db.collection(`users/${receiverUid}/notifications`).add({
+      title: title,
+      body: body,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      type: "friend_request",
+    });
+
+    // 2) Send Push Notification (if token exists)
+    const userSnap = await db.doc(`users/${receiverUid}`).get();
+    const token = userSnap.data()?.fcmToken;
+    if (token) {
+      await admin.messaging().send({
+        token: token,
+        notification: {title, body},
+      });
+    }
+  }
+);
+
 export const onFriendRequestAccepted = onDocumentUpdated(
   "friend_requests/{requestId}",
   async (event) => {
@@ -68,7 +160,116 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       friends: admin.firestore.FieldValue.arrayUnion(senderUid),
     });
 
+    // Notify sender that request was accepted
+    const receiverSnap = await db.doc(`user_public/${receiverUid}`).get();
+    const receiverName = receiverSnap.data()?.username || "Someone";
+
+    const title = "Friend Request Accepted";
+    const body = `${receiverName} accepted your friend request.`;
+
+    const notifRef = db.collection(`users/${senderUid}/notifications`).doc();
+    batch.set(notifRef, {
+      title: title,
+      body: body,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      type: "friend_request_accepted",
+    });
+
     await batch.commit();
+
+    // Send Push
+    const senderDoc = await db.doc(`users/${senderUid}`).get();
+    const token = senderDoc.data()?.fcmToken;
+    if (token) {
+      await admin.messaging().send({
+        token: token,
+        notification: {title, body},
+      });
+    }
+  }
+);
+
+export const onCircleInviteCreated = onDocumentCreated(
+  "circle_invites/{inviteId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const inviteeUid = data.inviteeUid;
+    const inviterName = data.inviterName;
+    const circleName = data.circleName;
+
+    const db = admin.firestore();
+    const title = "New Circle Invite";
+    const body = `${inviterName} invited you to join "${circleName}".`;
+
+    await db.collection(`users/${inviteeUid}/notifications`).add({
+      title: title,
+      body: body,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      type: "circle_invite",
+    });
+
+    const userSnap = await db.doc(`users/${inviteeUid}`).get();
+    const token = userSnap.data()?.fcmToken;
+    if (token) {
+      await admin.messaging().send({
+        token: token,
+        notification: {title, body},
+      });
+    }
+  }
+);
+
+export const onPhotoAdded = onDocumentCreated(
+  "circles/{circleId}/photos/{photoId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const circleId = event.params.circleId;
+    const uploaderUid = data.uploaderUid;
+
+    const db = admin.firestore();
+    const circleSnap = await db.doc(`circles/${circleId}`).get();
+    const circleData = circleSnap.data();
+    if (!circleData) return;
+
+    const circleName = circleData.name;
+    const members = circleData.members as string[];
+    const uploaderSnap = await db.doc(`user_public/${uploaderUid}`).get();
+    const uploaderName = uploaderSnap.data()?.username || "Someone";
+
+    const title = "New Photo";
+    const body = `${uploaderName} posted a new photo in "${circleName}".`;
+
+    const batch = db.batch();
+    for (const memberUid of members) {
+      if (memberUid === uploaderUid) continue;
+
+      const notifRef = db.collection(`users/${memberUid}/notifications`).doc();
+      batch.set(notifRef, {
+        title: title,
+        body: body,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: "new_photo",
+      });
+    }
+
+    await batch.commit();
+
+    // Send Push to members
+    for (const memberUid of members) {
+      if (memberUid === uploaderUid) continue;
+      const mDoc = await db.doc(`users/${memberUid}`).get();
+      const token = mDoc.data()?.fcmToken;
+      if (token) {
+        await admin.messaging().send({
+          token: token,
+          notification: {title, body},
+        });
+      }
+    }
   }
 );
 
