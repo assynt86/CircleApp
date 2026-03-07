@@ -1,14 +1,8 @@
 package com.crcleapp.crcle
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,21 +14,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.crcleapp.crcle.data.UserRepository
 import com.crcleapp.crcle.ui.theme.CircleAppTheme
 import com.crcleapp.crcle.ui.viewmodels.BugReportViewModel
 import com.crcleapp.crcle.ui.viewmodels.HomeViewModel
 import com.crcleapp.crcle.ui.viewmodels.MainViewModel
-import com.crcleapp.crcle.ui.viewmodels.NotificationsViewModel
 import com.crcleapp.crcle.ui.views.BlockedUsersView
 import com.crcleapp.crcle.ui.views.BugReportView
 import com.crcleapp.crcle.ui.views.CameraView
@@ -42,14 +31,12 @@ import com.crcleapp.crcle.ui.views.CircleView
 import com.crcleapp.crcle.ui.views.HomeView
 import com.crcleapp.crcle.ui.views.CircleSettingsView
 import com.crcleapp.crcle.ui.views.FriendsView
-import com.crcleapp.crcle.ui.views.NotificationsView
 import com.crcleapp.crcle.ui.views.ProfileView
 import com.crcleapp.crcle.ui.views.SettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.crcleapp.crcle.ui.views.AuthView
 import com.crcleapp.crcle.ui.viewmodels.AuthViewModel
-import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,50 +51,8 @@ class MainActivity : ComponentActivity() {
                 isDarkMode = isDarkMode
             ) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    NotificationPermissionHandler()
-                    AppNavigation(mainViewModel, onUserAuthenticated = { updateFcmToken() })
+                    AppNavigation(mainViewModel)
                 }
-            }
-        }
-
-        updateFcmToken()
-    }
-
-    private fun updateFcmToken() {
-        val auth = FirebaseAuth.getInstance()
-        val uid = auth.currentUser?.uid ?: return
-        
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w("FCM", "Fetching FCM registration token failed", task.exception)
-                return@addOnCompleteListener
-            }
-
-            val token = task.result
-            lifecycleScope.launch {
-                UserRepository().updateFcmToken(uid, token)
-            }
-        }
-    }
-}
-
-@Composable
-fun NotificationPermissionHandler() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val context = LocalContext.current
-        val launcher = rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { isGranted ->
-            // Permission result handled
-        }
-
-        LaunchedEffect(Unit) {
-            if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }
@@ -115,13 +60,13 @@ fun NotificationPermissionHandler() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AppNavigation(mainViewModel: MainViewModel, onUserAuthenticated: () -> Unit) {
+fun AppNavigation(mainViewModel: MainViewModel) {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
     
     // Use null as initial state to detect when preference is actually loaded from DataStore
-    val openOnHomePref by mainViewModel.openOnHome.collectAsState(initial = null)
+    val launchOnCameraPref by mainViewModel.launchOnCamera.collectAsState(initial = null)
 
     // Track authentication state reactively
     var currentUser by remember { mutableStateOf(auth.currentUser) }
@@ -145,8 +90,6 @@ fun AppNavigation(mainViewModel: MainViewModel, onUserAuthenticated: () -> Unit)
             navController.navigate("auth") {
                 popUpTo(0) { inclusive = true }
             }
-        } else {
-            onUserAuthenticated()
         }
     }
 
@@ -183,22 +126,19 @@ fun AppNavigation(mainViewModel: MainViewModel, onUserAuthenticated: () -> Unit)
             val argStartPage = backStackEntry.arguments?.getInt("startPage") ?: -1
             
             // Wait until preference is loaded before rendering the pager
-            if (openOnHomePref == null) {
+            if (launchOnCameraPref == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
-                // If startPage wasn't provided in nav args, use the user preference.
-                // 0 = Camera, 1 = Home. Default pref is false -> Camera(0).
+                // Default to Home (1) unless preference is set to launch on Camera (0)
                 val initialPage = if (argStartPage == -1) {
-                    if (openOnHomePref == true) 1 else 0
+                    if (launchOnCameraPref == true) 0 else 1
                 } else {
                     argStartPage
                 }
                 
                 val circleId = backStackEntry.arguments?.getString("circleId")
-                // key(openOnHomePref) is not needed here because the 'else' block
-                // only triggers once openOnHomePref is non-null.
                 val pagerState = rememberPagerState(initialPage = initialPage) { 3 }
 
                 HorizontalPager(state = pagerState) { page ->
@@ -229,7 +169,13 @@ fun AppNavigation(mainViewModel: MainViewModel, onUserAuthenticated: () -> Unit)
                                 navController.navigate("circle/$newCircleId")
                             },
                             onInvitesClick = {
-                                navController.navigate("notifications")
+                                navController.navigate("friends?tab=2")
+                            },
+                            onCameraClick = {
+                                coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                            },
+                            onProfileClick = {
+                                coroutineScope.launch { pagerState.animateScrollToPage(2) }
                             }
                         )
 
@@ -337,12 +283,6 @@ fun AppNavigation(mainViewModel: MainViewModel, onUserAuthenticated: () -> Unit)
                 onBack = { navController.popBackStack() },
                 initialTab = initialTab
             )
-        }
-
-        // -------- Notifications Log --------
-        composable("notifications") {
-            val notificationsViewModel: NotificationsViewModel = viewModel()
-            NotificationsView(onBack = { navController.popBackStack() }, notificationsViewModel = notificationsViewModel)
         }
     }
 }

@@ -7,7 +7,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 /**
  * AuthRepository:
  * - Sign up using Email/Password (Firebase Auth)
- * - Save user profile fields to Firestore: users/{uid}
+ * - Save user profile fields to Firestore: users/{uid} and user_public/{uid}
  * - Login using Email, Username or Phone
  */
 class AuthRepository(
@@ -33,19 +33,35 @@ class AuthRepository(
                 val uid = res.user?.uid
                     ?: return@addOnSuccessListener onError(IllegalStateException("Sign-up succeeded but uid is null"))
 
-                // User profile document in Firestore
-                val profile = hashMapOf(
+                val batch = db.batch()
+
+                // Private user profile document
+                val privateProfile = hashMapOf(
                     "uid" to uid,
                     "email" to email.trim(),
                     "username" to username.trim(),
                     "phone" to phone.trim(),
                     "displayName" to displayName.trim(),
                     "photoUrl" to "",
-                    "createdAt" to Timestamp.now()
+                    "createdAt" to Timestamp.now(),
+                    "autoAcceptInvites" to false
                 )
 
-                db.collection("users").document(uid)
-                    .set(profile)
+                // Public user profile document
+                val publicProfile = hashMapOf(
+                    "uid" to uid,
+                    "username" to username.trim(),
+                    "displayName" to displayName.trim(),
+                    "photoUrl" to ""
+                )
+
+                val userRef = db.collection("users").document(uid)
+                val publicRef = db.collection("user_public").document(uid)
+
+                batch.set(userRef, privateProfile)
+                batch.set(publicRef, publicProfile)
+
+                batch.commit()
                     .addOnSuccessListener { onSuccess() }
                     .addOnFailureListener { e -> onError(e) }
             }
@@ -58,22 +74,10 @@ class AuthRepository(
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        val trimmedIdentifier = identifier.trim()
+        val email = identifier.trim()
 
-        when {
-            // Check if it's an email
-            trimmedIdentifier.contains("@") -> {
-                loginWithEmail(trimmedIdentifier, password, onSuccess, onError)
-            }
-            // Check if it's a phone number (basic check: contains only digits, +, -, spaces)
-            trimmedIdentifier.all { it.isDigit() || it == '+' || it == '-' || it == ' ' } -> {
-                findEmailAndLogin("phone", trimmedIdentifier, password, onSuccess, onError)
-            }
-            // Otherwise, assume it's a username
-            else -> {
-                findEmailAndLogin("username", trimmedIdentifier, password, onSuccess, onError)
-            }
-        }
+        // MVP: email/password only (no Firestore lookup before auth)
+        loginWithEmail(email, password, onSuccess, onError)
     }
 
     private fun loginWithEmail(

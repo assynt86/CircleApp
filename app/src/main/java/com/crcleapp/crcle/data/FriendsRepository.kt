@@ -15,7 +15,8 @@ class FriendsRepository {
     fun sendFriendRequest(username: String, onSuccess: () -> Unit, onError: (Exception) -> Unit, onNotFound: () -> Unit) {
         val senderUid = currentUid ?: return onError(Exception("Not signed in"))
 
-        db.collection("users").whereEqualTo("username", username.trim()).limit(1).get()
+        // Lookup user by username in user_public
+        db.collection("user_public").whereEqualTo("username", username.trim()).limit(1).get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
                     onNotFound()
@@ -27,7 +28,8 @@ class FriendsRepository {
                     return@addOnSuccessListener
                 }
 
-                // Check if already friends or blocked
+                // Check if already friends or blocked (this still needs to check 'users' or a private collection,
+                // but usually the sender can check their own 'friends' list)
                 db.collection("users").document(senderUid).get().addOnSuccessListener { senderDoc ->
                     val friends = senderDoc.get("friends") as? List<String> ?: emptyList()
                     val blocked = senderDoc.get("blockedUsers") as? List<String> ?: emptyList()
@@ -41,7 +43,9 @@ class FriendsRepository {
                         return@addOnSuccessListener
                     }
 
-                    // Check if receiver blocked sender
+                    // Check if receiver blocked sender (this is tricky with strict rules,
+                    // but usually you can try to write a request and let rules reject it,
+                    // or keep this check if rules allow reading the 'blockedUsers' field under certain conditions)
                     db.collection("users").document(receiverUid).get().addOnSuccessListener { receiverDoc ->
                         val receiverBlocked = receiverDoc.get("blockedUsers") as? List<String> ?: emptyList()
                         if (senderUid in receiverBlocked) {
@@ -49,6 +53,20 @@ class FriendsRepository {
                             return@addOnSuccessListener
                         }
 
+                        val requestData = hashMapOf(
+                            "senderUid" to senderUid,
+                            "receiverUid" to receiverUid,
+                            "status" to "pending",
+                            "timestamp" to FieldValue.serverTimestamp()
+                        )
+
+                        db.collection("friend_requests").add(requestData)
+                            .addOnSuccessListener { onSuccess() }
+                            .addOnFailureListener { onError(it) }
+                    }.addOnFailureListener {
+                        // If we can't read the receiver's doc due to rules, we can just proceed with sending the request
+                        // and let the security rules for 'friend_requests' handle the logic.
+                        // For now, let's assume we can read it or handle it in rules.
                         val requestData = hashMapOf(
                             "senderUid" to senderUid,
                             "receiverUid" to receiverUid,
@@ -130,23 +148,34 @@ class FriendsRepository {
     }
 
     fun acceptFriendRequest(request: FriendRequest, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        val batch = db.batch()
-        val requestRef = db.collection("friend_requests").document(request.id)
-        batch.delete(requestRef)
-
-        val senderRef = db.collection("users").document(request.senderUid)
-        val receiverRef = db.collection("users").document(request.receiverUid)
-
-        batch.update(senderRef, "friends", FieldValue.arrayUnion(request.receiverUid))
-        batch.update(receiverRef, "friends", FieldValue.arrayUnion(request.senderUid))
-
-        batch.commit()
+        val updates = hashMapOf<String, Any>(
+            "status" to "accepted",
+            "timestamp" to FieldValue.serverTimestamp()
+        )
+        db.collection("friend_requests").document(request.id)
+            .update(updates)
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it) }
     }
 
     fun declineFriendRequest(requestId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        db.collection("friend_requests").document(requestId).delete()
+        val updates = hashMapOf<String, Any>(
+            "status" to "declined",
+            "timestamp" to FieldValue.serverTimestamp()
+        )
+        db.collection("friend_requests").document(requestId)
+            .update(updates)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it) }
+    }
+
+    fun cancelFriendRequest(requestId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
+        val updates = hashMapOf<String, Any>(
+            "status" to "canceled",
+            "timestamp" to FieldValue.serverTimestamp()
+        )
+        db.collection("friend_requests").document(requestId)
+            .update(updates)
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it) }
     }
@@ -209,7 +238,8 @@ class FriendsRepository {
             onSuccess(emptyList())
             return
         }
-        db.collection("users").whereIn("uid", uids).get()
+        // Read from user_public
+        db.collection("user_public").whereIn("uid", uids).get()
             .addOnSuccessListener { snapshot ->
                 onSuccess(snapshot.toObjects(UserProfile::class.java))
             }
@@ -217,7 +247,8 @@ class FriendsRepository {
     }
 
     fun getUser(uid: String, onSuccess: (UserProfile?) -> Unit, onError: (Exception) -> Unit) {
-        db.collection("users").document(uid).get()
+        // Read from user_public
+        db.collection("user_public").document(uid).get()
             .addOnSuccessListener { snapshot ->
                 onSuccess(snapshot.toObject(UserProfile::class.java))
             }

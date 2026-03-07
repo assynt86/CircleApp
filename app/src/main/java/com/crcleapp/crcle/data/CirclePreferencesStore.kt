@@ -12,16 +12,16 @@ private val Context.circleDataStore by preferencesDataStore(name = "circle_setti
 
 class CirclePreferencesStore(private val context: Context) {
     private val SELECTED_CIRCLES_KEY = stringSetPreferencesKey("selected_circle_ids")
-    private val OPEN_ON_HOME_KEY = booleanPreferencesKey("open_on_home")
+    private val LAUNCH_ON_CAMERA_KEY = booleanPreferencesKey("launch_on_camera")
 
     val selectedCircleIdsFlow: Flow<Set<String>> = context.circleDataStore.data
         .map { preferences ->
             preferences[SELECTED_CIRCLES_KEY] ?: emptySet()
         }
 
-    val openOnHomeFlow: Flow<Boolean> = context.circleDataStore.data
+    val launchOnCameraFlow: Flow<Boolean> = context.circleDataStore.data
         .map { preferences ->
-            preferences[OPEN_ON_HOME_KEY] ?: false
+            preferences[LAUNCH_ON_CAMERA_KEY] ?: false
         }
 
     suspend fun saveSelectedCircleIds(ids: Set<String>) {
@@ -30,9 +30,9 @@ class CirclePreferencesStore(private val context: Context) {
         }
     }
 
-    suspend fun setOpenOnHome(enabled: Boolean) {
+    suspend fun setLaunchOnCamera(enabled: Boolean) {
         context.circleDataStore.edit { preferences ->
-            preferences[OPEN_ON_HOME_KEY] = enabled
+            preferences[LAUNCH_ON_CAMERA_KEY] = enabled
         }
     }
 }

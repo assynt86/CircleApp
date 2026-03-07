@@ -29,5 +29,11 @@ module.exports = {
     "quotes": ["error", "double"],
     "import/no-unresolved": 0,
     "indent": ["error", 2],
+
+    // Windows-friendly: don't fail because of CRLF vs LF
+    "linebreak-style": "off",
+
+    // stop the 80-char pain
+    "max-len": ["error", {code: 120}],
   },
 };

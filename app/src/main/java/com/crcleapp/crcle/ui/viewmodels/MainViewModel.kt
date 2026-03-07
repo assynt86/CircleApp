@@ -12,5 +12,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     
     val useSystemTheme: Flow<Boolean> = themePreferences.useSystemThemeFlow
     val isDarkMode: Flow<Boolean> = themePreferences.isDarkModeFlow
-    val openOnHome: Flow<Boolean> = circlePreferences.openOnHomeFlow
+    val launchOnCamera: Flow<Boolean> = circlePreferences.launchOnCameraFlow
 }

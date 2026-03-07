@@ -17,6 +17,7 @@ data class Circle(
     val cleanedUp: Boolean = false,
     val status: String = "open",
     val backgroundUrl: String? = null,
+    val storageBytes: Long = 0L,
     @get:Exclude var previewUrl: String? = null
 ) {
     @get:Exclude
@@ -64,6 +65,7 @@ data class Photo(
     @DocumentId val id: String = "",
     val uploaderUid: String = "",
     val storagePath: String = "",
+    val sizeBytes: Long = 0L,
     val createdAt: Timestamp? = null
 )
 
@@ -74,7 +76,8 @@ data class CircleInfo(
     val closeAt: Timestamp?,
     val deleteAt: Timestamp? = null,
     val ownerUid: String,
-    val backgroundUrl: String? = null
+    val backgroundUrl: String? = null,
+    val storageBytes: Long = 0L
 ) {
     val isClosed: Boolean
         get() {
@@ -97,6 +100,7 @@ data class PhotoItem(
     val uploaderUid: String,
     val storagePath: String,
     val createdAt: Timestamp?,
+    val sizeBytes: Long = 0L,
     var downloadUrl: String? = null,
     var uploaderName: String? = null
 )
@@ -109,8 +113,7 @@ data class UserProfile(
     val displayName: String = "",
     val photoUrl: String = "",
     val createdAt: Timestamp? = null,
-    val autoAcceptInvites: Boolean = false,
-    val fcmToken: String? = null
+    val autoAcceptInvites: Boolean = false
 )
 
 data class CircleInvite(
@@ -123,13 +126,4 @@ data class CircleInvite(
     val inviterName: String = "",
     val status: String = "pending",
     val timestamp: Timestamp? = null
-)
-
-data class FriendRequest(
-    val id: String = "",
-    val senderUid: String = "",
-    val receiverUid: String = "",
-    val status: String = "",
-    val senderUsername: String? = null,
-    val receiverUsername: String? = null
 )

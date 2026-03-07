@@ -1,212 +1,16 @@
-import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
-import { onSchedule } from "firebase-functions/v2/scheduler";
+import {onSchedule} from "firebase-functions/v2/scheduler";
+import {onDocumentUpdated, onDocumentDeleted} from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 
 admin.initializeApp();
 
-const db = admin.firestore();
-const fcm = admin.messaging();
-
-/**
- * Send notification to a specific UID
- */
-async function sendPushNotification(uid: string, title: string, body: string, data?: any) {
-  const userDoc = await db.collection("users").doc(uid).get();
-  const fcmToken = userDoc.data()?.fcmToken;
-
-  if (fcmToken) {
-    try {
-      await fcm.send({
-        token: fcmToken,
-        notification: {
-          title,
-          body,
-        },
-        data: data || {},
-      });
-    } catch (error) {
-      console.error(`Error sending notification to ${uid}:`, error);
-    }
-  }
-}
-
-/**
- * TEST FUNCTION: Sends a notification every 1 minute to ALL users with a token.
- * Remove this after testing!
- */
-export const testNotificationTimer = onSchedule("every 1 minutes", async () => {
-  const usersWithTokens = await db.collection("users").where("fcmToken", "!=", "").get();
-
-  const promises = usersWithTokens.docs.map(doc => {
-    const token = doc.data().fcmToken;
-    return fcm.send({
-      token: token,
-      notification: {
-        title: "Test Notification",
-        body: `Test signal sent at ${new Date().toLocaleTimeString()}`,
-      },
-    }).catch(e => console.log("Failed to send test to", doc.id, e));
-  });
-
-  await Promise.all(promises);
-});
-
-/**
- * Notify owner when someone joins via invite code
- */
-export const onCircleJoin = onDocumentUpdated("circles/{circleId}", async (event) => {
-  const newData = event.data?.after.data();
-  const oldData = event.data?.before.data();
-
-  if (!newData || !oldData) return;
-
-  const newMembers = newData.members as string[];
-  const oldMembers = oldData.members as string[];
-
-  if (newMembers.length > oldMembers.length) {
-    const joinedUid = newMembers.find((m) => !oldMembers.includes(m));
-    if (joinedUid && joinedUid !== newData.ownerUid) {
-      const userDoc = await db.collection("users").doc(joinedUid).get();
-      const username = userDoc.data()?.username || "Someone";
-      const circleName = newData.name || "a circle";
-
-      await sendPushNotification(
-        newData.ownerUid,
-        "New Member Joined!",
-        `${username} has joined ${circleName}`
-      );
-    }
-  }
-});
-
-/**
- * Notify members when someone uploads 20+ photos
- */
-export const onPhotoUpload = onDocumentCreated("circles/{circleId}/photos/{photoId}", async (event) => {
-  const photoData = event.data?.data();
-  const circleId = event.params.circleId;
-
-  if (!photoData) return;
-
-  const uploaderUid = photoData.uploaderUid;
-
-  const photosSnap = await db.collection("circles").doc(circleId).collection("photos")
-    .where("uploaderUid", "==", uploaderUid)
-    .get();
-
-  if (photosSnap.size === 20) {
-    const circleDoc = await db.collection("circles").doc(circleId).get();
-    const circleData = circleDoc.data();
-    if (!circleData) return;
-
-    const userDoc = await db.collection("users").doc(uploaderUid).get();
-    const username = userDoc.data()?.username || "Someone";
-
-    const members = circleData.members as string[];
-    const others = members.filter((m) => m !== uploaderUid);
-
-    for (const uid of others) {
-      await sendPushNotification(
-        uid,
-        "Photo Dump!",
-        `${username} just dropped their photo dump in ${circleData.name}`
-      );
-    }
-  }
-});
-
-/**
- * Friend Request Received
- */
-export const onFriendRequestCreated = onDocumentCreated("friend_requests/{requestId}", async (event) => {
-  const requestData = event.data?.data();
-  if (!requestData) return;
-
-  const senderDoc = await db.collection("users").doc(requestData.senderUid).get();
-  const senderName = senderDoc.data()?.username || "Someone";
-
-  await sendPushNotification(
-    requestData.receiverUid,
-    "New Friend Request",
-    `${senderName} sent you a friend request.`
-  );
-});
-
-/**
- * Friend Request Accepted
- */
-export const onUserUpdate = onDocumentUpdated("users/{userId}", async (event) => {
-  const newData = event.data?.after.data();
-  const oldData = event.data?.before.data();
-
-  if (!newData || !oldData) return;
-
-  const newFriends = newData.friends as string[];
-  const oldFriends = oldData.friends as string[];
-
-  if (newFriends.length > oldFriends.length) {
-    const addedFriendUid = newFriends.find((f) => !oldFriends.includes(f));
-    if (addedFriendUid) {
-      const userDoc = await db.collection("users").doc(event.params.userId).get();
-      const username = userDoc.data()?.username || "Someone";
-
-      await sendPushNotification(
-        addedFriendUid,
-        "Friend Request Accepted",
-        `${username} accepted your friend request!`
-      );
-    }
-  }
-});
-
-/**
- * Scheduled checks for closing/expiring circles
- */
-export const notifyExpiringCircles = onSchedule("every 1 hours", async () => {
-  const now = admin.firestore.Timestamp.now();
-  const in24Hours = new admin.firestore.Timestamp(now.seconds + 24 * 3600, 0);
-  const in25Hours = new admin.firestore.Timestamp(now.seconds + 25 * 3600, 0);
-
-  const closingSnap = await db.collection("circles")
-    .where("closeAt", ">=", in24Hours)
-    .where("closeAt", "<", in25Hours)
-    .get();
-
-  for (const doc of closingSnap.docs) {
-    const data = doc.data();
-    for (const uid of data.members) {
-      await sendPushNotification(
-        uid,
-        "Circle Closing Soon!",
-        `${data.name} will close in 24 hours. Get your photos in!`
-      );
-    }
-  }
-
-  const expiringSnap = await db.collection("circles")
-    .where("deleteAt", ">=", in24Hours)
-    .where("deleteAt", "<", in25Hours)
-    .get();
-
-  for (const doc of expiringSnap.docs) {
-    const data = doc.data();
-    for (const uid of data.members) {
-      await sendPushNotification(
-        uid,
-        "Circle Expiring Soon!",
-        `${data.name} will be deleted in 24 hours. Save your memories!`
-      );
-    }
-  }
-});
-
-/**
- * Original cleanup function
- */
 export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => {
+  const db = admin.firestore();
   const bucket = admin.storage().bucket();
+
   const now = admin.firestore.Timestamp.now();
 
+  // Find circles that should be deleted and not already cleaned
   const circlesSnap = await db
     .collection("circles")
     .where("deleteAt", "<=", now)
@@ -218,13 +22,134 @@ export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => 
 
   for (const circleDoc of circlesSnap.docs) {
     const circleId = circleDoc.id;
-    const [files] = await bucket.getFiles({ prefix: `circles/${circleId}/` });
+
+    // 1) Delete all files in Storage under circles/{circleId}/
+    const [files] = await bucket.getFiles({prefix: `circles/${circleId}/`});
     await Promise.all(files.map((f) => f.delete().catch(() => null)));
 
-    const photosSnap = await db.collection("circles").doc(circleId).collection("photos").get();
+    // 2) Delete photo metadata docs
+    const photosSnap = await db
+      .collection("circles")
+      .doc(circleId)
+      .collection("photos")
+      .get();
+
     const batch = db.batch();
     photosSnap.docs.forEach((d) => batch.delete(d.ref));
-    batch.update(circleDoc.ref, { cleanedUp: true });
-    await Promise.all([batch.commit()]);
+
+    // 3) Mark circle cleanedUp so it won’t run again
+    batch.update(circleDoc.ref, {cleanedUp: true});
+
+    await batch.commit();
   }
 });
+
+export const onFriendRequestAccepted = onDocumentUpdated(
+  "friend_requests/{requestId}",
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    // Only run when status changes to "accepted"
+    if (before.status === after.status) return;
+    if (after.status !== "accepted") return;
+
+    const senderUid = after.senderUid;
+    const receiverUid = after.receiverUid;
+
+    const db = admin.firestore();
+    const batch = db.batch();
+
+    batch.update(db.doc(`users/${senderUid}`), {
+      friends: admin.firestore.FieldValue.arrayUnion(receiverUid),
+    });
+    batch.update(db.doc(`users/${receiverUid}`), {
+      friends: admin.firestore.FieldValue.arrayUnion(senderUid),
+    });
+
+    await batch.commit();
+  }
+);
+
+/** Firestore trigger: when a circle doc is deleted, clean up its Storage files and related Firestore docs. */
+export const onCircleDeleted = onDocumentDeleted(
+  "circles/{circleId}",
+  async (event) => {
+    const circleId = event.params.circleId;
+
+    const db = admin.firestore();
+    const bucket = admin.storage().bucket();
+
+    // 1) Delete all files in Storage under circles/{circleId}/
+    const [files] = await bucket.getFiles({prefix: `circles/${circleId}/`});
+    await Promise.all(files.map((f) => f.delete().catch(() => null)));
+
+    // 2) Delete photos subcollection docs (subcollections don't delete automatically)
+    await deleteCollection(db.collection("circles").doc(circleId).collection("photos"));
+
+    // 3) Delete circle_codes docs that point to this circle
+    await deleteByQuery(db.collection("circle_codes").where("circleId", "==", circleId));
+
+    // 4) Delete invites for this circle (optional but good cleanup)
+    await deleteByQuery(db.collection("circle_invites").where("circleId", "==", circleId));
+
+    // 5) Delete reports for this circle (optional)
+    await deleteByQuery(db.collection("reports").where("circleId", "==", circleId));
+  }
+);
+
+// -------- helpers --------
+
+/**
+ * Deletes all documents returned by a query, committing in batches (Firestore batch limit is 500).
+ * @param {FirebaseFirestore.Query} query Query whose result docs will be deleted.
+ * @return {Promise<void>}
+ */
+async function deleteByQuery(query: FirebaseFirestore.Query) {
+  const snap = await query.get();
+  if (snap.empty) return;
+
+  const db = admin.firestore();
+  let batch = db.batch();
+  let opCount = 0;
+
+  for (const doc of snap.docs) {
+    batch.delete(doc.ref);
+    opCount++;
+
+    // keep well below 500
+    if (opCount >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      opCount = 0;
+    }
+  }
+
+  if (opCount > 0) {
+    await batch.commit();
+  }
+}
+
+/**
+ * Deletes an entire subcollection in batches.
+ * @param {FirebaseFirestore.CollectionReference} col The collection reference to delete from.
+ * @param {number} batchSize Max docs per batch commit (keep < 500).
+ * @return {Promise<void>}
+ */
+async function deleteCollection(
+  col: FirebaseFirestore.CollectionReference,
+  batchSize = 450
+) {
+  const db = admin.firestore();
+
+  // Loop until the collection is empty (no constant condition lint issue)
+  let snap = await col.limit(batchSize).get();
+  while (!snap.empty) {
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+
+    snap = await col.limit(batchSize).get();
+  }
+}

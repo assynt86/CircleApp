@@ -1,6 +1,7 @@
 package com.crcleapp.crcle.ui.views
 
 import android.app.Application
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,17 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -29,31 +20,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.GroupAdd
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +43,7 @@ import com.crcleapp.crcle.ui.components.ZoomableImage
 import com.crcleapp.crcle.ui.viewmodels.CircleUiState
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModel
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModelFactory
+import com.crcleapp.crcle.ui.theme.LeagueSpartan
 
 @Composable
 fun CircleView(
@@ -82,7 +52,8 @@ fun CircleView(
     onCameraClick: (String) -> Unit,
     onSettingsClick: (String) -> Unit
 ) {
-    val application = LocalContext.current.applicationContext as Application
+    val context = LocalContext.current
+    val application = context.applicationContext as Application
     val factory = remember(circleId) { CircleViewModelFactory(application, circleId) }
     val viewModel: CircleViewModel = viewModel(factory = factory)
     val uiState by viewModel.uiState.collectAsState()
@@ -95,6 +66,13 @@ fun CircleView(
             }
         }
     )
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
+        }
+    }
 
     CircleViewContent(
         uiState = uiState,
@@ -140,8 +118,24 @@ fun CircleViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.circleInfo?.name ?: "Circle") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                title = {
+                    Text(
+                        text = uiState.circleInfo?.name ?: "Circle",
+                        modifier = Modifier.clickable { onSettingsClick() },
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp
+                    )
+                },
+                navigationIcon = { 
+                    TextButton(onClick = onBack) { 
+                        Text(
+                            "Back",
+                            fontFamily = LeagueSpartan,
+                            fontWeight = FontWeight.Medium
+                        ) 
+                    } 
+                },
                 actions = {
                     if (uiState.inSelectionMode) {
                         val canDeleteAll = !isClosed && uiState.selectedPhotos.isNotEmpty() && uiState.selectedPhotos.all { id ->
@@ -162,21 +156,12 @@ fun CircleViewContent(
                             Icon(Icons.Filled.Cancel, contentDescription = "Cancel Selection")
                         }
                     } else {
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                        }
                         IconButton(onClick = { onShowInviteDialog(true) }) {
                             Icon(Icons.Filled.GroupAdd, contentDescription = "Invite People")
                         }
-                        IconButton(onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onToggleSelectionMode()
-                        }) {
-                            Icon(Icons.Filled.Checklist, contentDescription = "Select Photos")
-                        }
                         if (!isClosed) {
                             IconButton(onClick = onUploadPhoto) {
-                                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Upload Photo")
+                                Icon(Icons.Filled.FileUpload, contentDescription = "Upload Photo")
                             }
                         }
                     }
@@ -191,20 +176,16 @@ fun CircleViewContent(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
             ) {
-                if (uiState.error != null) {
-                    Text("Error: ${uiState.error}", color = MaterialTheme.colorScheme.error)
-                    return@Column
-                }
-
                 if (uiState.circleInfo == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                        Text("Loading circle...")
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(8.dp))
+                            Text("Loading circle...", fontFamily = LeagueSpartan)
+                        }
                     }
                     return@Column
                 }
-
-                val info = uiState.circleInfo
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -214,33 +195,47 @@ fun CircleViewContent(
                     Text(
                         text = if (isClosed) "Status: CLOSED" else "Status: OPEN",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isClosed) Color.Gray else Color(0xFF4CAF50)
+                        color = if (isClosed) Color.Gray else Color(0xFF4CAF50),
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.SemiBold
                     )
 
                     if (!isClosed) {
                         Text(
                             text = "Closes in: ${uiState.remainingTime}",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = LeagueSpartan
                         )
                     } else if (uiState.deleteInTime.isNotEmpty()) {
                         Text(
                             text = "Deletes in: ${uiState.deleteInTime}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
+                            color = Color.Gray,
+                            fontFamily = LeagueSpartan
                         )
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("Photos (${uiState.photos.size})", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Photos (${uiState.photos.size})", 
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = LeagueSpartan,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(Modifier.height(8.dp))
 
                 if (uiState.isUploading) {
-                    CircularProgressIndicator()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Uploading...", style = MaterialTheme.typography.bodySmall, fontFamily = LeagueSpartan)
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
 
                 if (uiState.photos.isEmpty()) {
-                    Text("No photos yet.")
+                    Text("No photos yet.", fontFamily = LeagueSpartan)
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
@@ -300,7 +295,7 @@ fun CircleViewContent(
                 }
             }
 
-            // Floating Camera Button at bottom middle - Neutral styling (no purple)
+            // Floating Camera Button at bottom middle
             if (!isClosed && !uiState.inSelectionMode) {
                 Box(
                     modifier = Modifier
@@ -328,7 +323,7 @@ fun CircleViewContent(
     if (uiState.showInviteDialog && uiState.circleInfo != null) {
         AlertDialog(
             onDismissRequest = { onShowInviteDialog(false) },
-            title = { Text("Invite to ${uiState.circleInfo?.name}") },
+            title = { Text("Invite to ${uiState.circleInfo?.name}", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
             text = {
                 val inviteCode = uiState.circleInfo!!.inviteCode
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -348,12 +343,12 @@ fun CircleViewContent(
                         }
                     }
                     Spacer(Modifier.height(16.dp))
-                    Text(inviteCode, style = MaterialTheme.typography.headlineLarge, letterSpacing = 5.sp)
+                    Text(inviteCode, style = MaterialTheme.typography.headlineLarge, letterSpacing = 5.sp, fontFamily = LeagueSpartan)
                 }
             },
             confirmButton = {
                 TextButton(onClick = { onShowInviteDialog(false) }) {
-                    Text("Close")
+                    Text("Close", fontFamily = LeagueSpartan)
                 }
             }
         )
@@ -390,7 +385,7 @@ fun CircleViewContent(
                         contentDescription = "Full screen image",
                         isCurrentPage = pagerState.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
                         onTap = { onSetFullscreenImage(null) }
                     )
                 }
@@ -433,7 +428,8 @@ fun CircleViewContent(
                                 Text(
                                     text = uploader.username.ifEmpty { uploader.displayName },
                                     color = Color.White,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = LeagueSpartan
                                 )
                             }
                         }

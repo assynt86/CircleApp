@@ -292,7 +292,7 @@ fun FriendsView(
                     items(filteredOutgoing) { request ->
                         OutgoingRequestItem(
                             request = request,
-                            onCancel = { viewModel.declineRequest(request.request.id) }
+                            onCancel = { viewModel.cancelRequest(request.request.id) }
                         )
                     }
                 } else if (uiState.selectedTab == 2) {

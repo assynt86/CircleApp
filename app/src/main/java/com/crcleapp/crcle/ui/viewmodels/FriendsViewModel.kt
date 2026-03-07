@@ -109,6 +109,10 @@ class FriendsViewModel : ViewModel() {
         repository.declineFriendRequest(reqId, {}, {})
     }
 
+    fun cancelRequest(reqId: String) {
+        repository.cancelFriendRequest(reqId, {}, {})
+    }
+
     fun removeFriend(uid: String) {
         repository.removeFriend(uid, {
             _uiState.update { it.copy(showRemoveConfirmation = null) }
@@ -138,7 +142,7 @@ class FriendsViewModel : ViewModel() {
             onSuccess = {
                 _uiState.update { it.copy(message = if (accept) "Joined circle" else "Invite declined") }
             },
-            onError = { e ->
+            onError = { e: Exception ->
                 _uiState.update { it.copy(message = e.message) }
             }
         )
