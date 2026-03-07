@@ -224,14 +224,21 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         val lock = Any()
 
         uris.forEach { uri ->
-            repository.addPhotoToCircles(uri, circleIds) { isSuccess ->
+            repository.addPhotoToCircles(uri, circleIds) { isSuccess, errors ->
                 synchronized(lock) {
                     completedUploads++
                     if (isSuccess) {
                         successfulUploads++
+                    } else {
+                        // Display the first error encountered
+                        val firstError = errors.values.firstOrNull() ?: "Upload failed"
+                        _uiState.update { it.copy(error = firstError) }
                     }
                     if (completedUploads == totalPhotos) {
-                        _uiState.update { it.copy(isUploading = false, showCamera = false) }
+                        _uiState.update { it.copy(isUploading = false) }
+                        if (successfulUploads == totalPhotos) {
+                            _uiState.update { it.copy(showCamera = false) }
+                        }
                         onComplete(successfulUploads == totalPhotos)
                     }
                 }
@@ -329,5 +336,9 @@ class CircleViewModel(application: Application, private val circleId: String) : 
 
     fun setShowInviteDialog(show: Boolean) {
         _uiState.update { it.copy(showInviteDialog = show) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 }

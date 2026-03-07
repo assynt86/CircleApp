@@ -1,13 +1,16 @@
 package com.crcleapp.crcle.ui.viewmodels
 
 import android.app.Application
+import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crcleapp.crcle.data.Circle
 import com.crcleapp.crcle.data.CirclePreferencesStore
 import com.crcleapp.crcle.data.CircleRepository
 import com.crcleapp.crcle.data.UserRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +36,8 @@ data class HomeUiState(
     val isCapturing: Boolean = false,
     val cameraNavigationState: CameraNavigationState = CameraNavigationState(),
     val isLoading: Boolean = true,
+    val isReady: Boolean = false,
+    val loadedImagesCount: Int = 0,
     val errorMessage: String? = null,
     val previewCircle: Circle? = null,
     val showJoinPreview: Boolean = false,
@@ -53,11 +58,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var initialLoadCompleted = false
     private var pendingEntryPointCircleId: String? = null
     private var lastHandledEntryPointId: String? = "" // "" means nothing handled yet. null is a valid entry point.
+    
+    private var minLoadingTimeReached = false
 
     init {
+        startMinLoadingTimer()
         loadUserCircles()
         loadUserSettings()
         listenToInvites()
+        updateCameraPermission()
+    }
+
+    private fun startMinLoadingTimer() {
+        viewModelScope.launch {
+            delay(1500) // At least 1.5s splash
+            minLoadingTimeReached = true
+            checkReady()
+        }
     }
 
     private fun loadUserSettings() {
@@ -104,7 +121,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         
                         currentState.copy(
                             circles = circleList,
-                            selectedCircleIds = selection
+                            selectedCircleIds = selection,
+                            loadedImagesCount = 0 // Reset count for fresh load
                         )
                     }
                     
@@ -112,6 +130,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         fetchPreviewPhotos(circleList, onComplete = {
                             initialLoadCompleted = true
                             _uiState.update { it.copy(isLoading = false) }
+                            checkReady()
                         })
                     } else {
                         // For subsequent updates, just fetch photos without blocking the UI
@@ -120,6 +139,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 onError = { 
                     _uiState.update { it.copy(isLoading = false, errorMessage = "Error loading circles") }
+                    checkReady()
                 }
             )
         }
@@ -174,6 +194,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateCameraPermission() {
+        val isGranted = ContextCompat.checkSelfPermission(
+            getApplication(),
+            android.Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+        _uiState.update { it.copy(hasCameraPermission = isGranted) }
+    }
+
     fun onCameraPermissionResult(isGranted: Boolean) {
         _uiState.update { it.copy(hasCameraPermission = isGranted) }
     }
@@ -184,6 +212,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onCameraNavigationHandled() {
         _uiState.update { it.copy(cameraNavigationState = CameraNavigationState()) }
+    }
+
+    fun onImageLoaded() {
+        _uiState.update { it.copy(loadedImagesCount = it.loadedImagesCount + 1) }
+        checkReady()
+    }
+
+    private fun checkReady() {
+        val state = _uiState.value
+        val allImagesLoaded = state.circles.isEmpty() || state.loadedImagesCount >= state.circles.size
+        
+        // Conditions for readiness:
+        // 1. Initial data fetch finished (isLoading = false)
+        // 2. All images reported success/error (allImagesLoaded = true)
+        // 3. Minimum splash time elapsed (minLoadingTimeReached = true)
+        if (!state.isLoading && allImagesLoaded && minLoadingTimeReached) {
+            viewModelScope.launch {
+                delay(400) // Extra buffer for composition/rendering transition
+                _uiState.update { it.copy(isReady = true) }
+            }
+        }
     }
 
     fun createCircle(onSuccess: (String) -> Unit) {

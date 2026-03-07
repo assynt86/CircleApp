@@ -142,7 +142,7 @@ class FriendsViewModel : ViewModel() {
             onSuccess = {
                 _uiState.update { it.copy(message = if (accept) "Joined circle" else "Invite declined") }
             },
-            onError = { e ->
+            onError = { e: Exception ->
                 _uiState.update { it.copy(message = e.message) }
             }
         )
