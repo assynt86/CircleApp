@@ -8,5 +8,7 @@ data class NotificationLog(
     val title: String = "",
     val body: String = "",
     val timestamp: Timestamp? = null,
-    val type: String = ""
+    val type: String = "",
+    val circleId: String? = null,
+    val senderUid: String? = null
 )

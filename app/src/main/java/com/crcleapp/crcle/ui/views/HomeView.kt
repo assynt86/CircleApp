@@ -95,6 +95,7 @@ fun HomeView(
         )
 
         // Splash screen visible until ViewModel flags it as ready
+        @Suppress("DEPRECATION")
         AnimatedVisibility(
             visible = !uiState.isReady,
             enter = fadeIn(),
@@ -180,9 +181,9 @@ fun HomeViewContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onInvitesClick) {
-                            if (uiState.pendingInvitesCount > 0) {
+                            if (uiState.pendingNotificationsCount > 0) {
                                 BadgedBox(badge = {
-                                    Badge { Text(uiState.pendingInvitesCount.toString()) }
+                                    Badge { Text(uiState.pendingNotificationsCount.toString()) }
                                 }) {
                                     Icon(Icons.Filled.Notifications, contentDescription = "Notifications")
                                 }
@@ -297,7 +298,7 @@ fun HomeViewContent(
                                             color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.titleLarge.copy(
                                                 fontSize = 24.sp,
-                                                fontWeight = FontWeight.ExtraBold
+                                                fontWeight = FontWeight.Bold
                                             ),
                                             fontFamily = LeagueSpartan,
                                             softWrap = true,

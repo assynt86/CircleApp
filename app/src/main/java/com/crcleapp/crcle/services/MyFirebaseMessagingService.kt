@@ -6,13 +6,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.crcleapp.crcle.MainActivity
 import com.crcleapp.crcle.R
 import com.crcleapp.crcle.data.NotificationPreferencesStore
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -26,13 +24,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        Log.d("FCM", "Message received: data=${remoteMessage.data}, notification=${remoteMessage.notification?.title}")
+
         val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: "Circle Notification"
         val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: ""
 
         serviceScope.launch {
-            // Log to Firestore for debugging
-            saveNotificationToLog(title, body)
-
             val prefs = NotificationPreferencesStore(applicationContext)
             val notificationsEnabled = prefs.notificationsEnabledFlow.first()
 
@@ -42,22 +39,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun saveNotificationToLog(title: String, body: String) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val db = FirebaseFirestore.getInstance()
-        
-        val logData = hashMapOf(
-            "title" to title,
-            "body" to body,
-            "timestamp" to FieldValue.serverTimestamp()
-        )
-
-        db.collection("users").document(uid).collection("notifications")
-            .add(logData)
-    }
-
     override fun onNewToken(token: String) {
-        // Handle token refresh if needed
+        Log.d("FCM", "New token generated: $token")
     }
 
     private fun sendNotification(title: String, body: String) {
@@ -69,11 +52,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val channelId = "circle_notifications"
+        val notificationId = (title + body).hashCode()
+        val channelId = "circle_silent_updates"
+        
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
+            .setPriority(NotificationCompat.PRIORITY_LOW) // Silent, no heads-up
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
@@ -82,12 +68,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Circle App Notifications",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
+                "Circle Silent Updates",
+                NotificationManager.IMPORTANCE_LOW // Silent
+            ).apply {
+                description = "Silent notifications for requests and invites"
+                enableLights(false)
+                enableVibration(false)
+                setSound(null, null)
+            }
             notificationManager.createNotificationChannel(channel)
         }
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
+        notificationManager.notify(notificationId, notificationBuilder.build())
     }
 }

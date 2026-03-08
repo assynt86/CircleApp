@@ -318,7 +318,15 @@ fun AppNavigation(mainViewModel: MainViewModel) {
 
         // -------- Notifications --------
         composable("notifications") {
-            NotificationsView(onBack = { navController.popBackStack() })
+            NotificationsView(
+                onBack = { navController.popBackStack() },
+                onNavigateToFriends = { tab ->
+                    navController.navigate("friends?tab=$tab")
+                },
+                onNavigateToCircle = { circleId ->
+                    navController.navigate("circle/$circleId")
+                }
+            )
         }
     }
 }

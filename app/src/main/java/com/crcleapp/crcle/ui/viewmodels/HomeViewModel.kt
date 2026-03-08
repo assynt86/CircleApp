@@ -3,18 +3,24 @@ package com.crcleapp.crcle.ui.viewmodels
 import android.app.Application
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crcleapp.crcle.data.Circle
 import com.crcleapp.crcle.data.CirclePreferencesStore
 import com.crcleapp.crcle.data.CircleRepository
+import com.crcleapp.crcle.data.FriendsRepository
+import com.crcleapp.crcle.data.NotificationLog
 import com.crcleapp.crcle.data.UserRepository
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -42,14 +48,17 @@ data class HomeUiState(
     val previewCircle: Circle? = null,
     val showJoinPreview: Boolean = false,
     val autoAcceptInvites: Boolean = false,
-    val pendingInvitesCount: Int = 0
+    val pendingNotificationsCount: Int = 0
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = CircleRepository()
+    private val friendsRepository = FriendsRepository()
     private val userRepository = UserRepository()
     private val prefsStore = CirclePreferencesStore(application)
+    private val db = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -65,7 +74,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         startMinLoadingTimer()
         loadUserCircles()
         loadUserSettings()
-        listenToInvites()
+        listenToNotifications()
         updateCameraPermission()
     }
 
@@ -84,14 +93,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun listenToInvites() {
+    private fun listenToNotifications() {
+        val uid = auth.currentUser?.uid ?: return
+        
+        // Use a state flow for notification logs to combine with other sources
+        val notificationLogsFlow = MutableStateFlow<List<NotificationLog>>(emptyList())
+        db.collection("users").document(uid).collection("notifications")
+            .addSnapshotListener { snapshot, error ->
+                if (error == null && snapshot != null) {
+                    notificationLogsFlow.value = snapshot.toObjects(NotificationLog::class.java)
+                }
+            }
+
         viewModelScope.launch {
-            repository.listenToCircleInvites().collectLatest { invites ->
-                _uiState.update { it.copy(pendingInvitesCount = invites.size) }
+            combine(
+                notificationLogsFlow,
+                repository.listenToCircleInvites(),
+                friendsRepository.listenToIncomingRequests()
+            ) { logs, invites, requests ->
+                // To avoid double counting, we define the "Total attention items" as:
+                // 1. All pending circle invites
+                // 2. All pending friend requests
+                // 3. All other notification logs (like expiry warnings) that are NOT invites/requests
+                val otherLogs = logs.filter { it.type != "circle_invite" && it.type != "friend_request" }
+                
+                Log.d("HomeVM", "Combined count: logs=${otherLogs.size}, invites=${invites.size}, requests=${requests.size}")
+                
+                otherLogs.size + invites.size + requests.size
+            }.collectLatest { totalCount ->
+                _uiState.update { it.copy(pendingNotificationsCount = totalCount) }
             }
         }
     }
-
+    
     private fun loadUserCircles() {
         viewModelScope.launch {
             val savedSelection = prefsStore.selectedCircleIdsFlow.first()

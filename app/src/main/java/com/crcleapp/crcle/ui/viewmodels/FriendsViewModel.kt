@@ -9,6 +9,8 @@ import com.crcleapp.crcle.data.CircleRepository
 import com.crcleapp.crcle.data.FriendRequest
 import com.crcleapp.crcle.data.FriendsRepository
 import com.crcleapp.crcle.data.UserProfile
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -35,6 +37,8 @@ data class FriendRequestWithUser(
 class FriendsViewModel : ViewModel() {
     private val repository = FriendsRepository()
     private val circleRepository = CircleRepository()
+    private val db = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
     private val _uiState = MutableStateFlow(FriendsUiState())
     val uiState = _uiState.asStateFlow()
     private val TAG = "FriendsViewModel"
@@ -136,13 +140,22 @@ class FriendsViewModel : ViewModel() {
         Log.d(TAG, "acceptRequest: ${req.id}")
         repository.acceptFriendRequest(req, {
             Log.d(TAG, "acceptRequest success")
+            val user = _uiState.value.incomingRequests.find { it.request.id == req.id }?.user
+            clearFriendNotification(req.senderUid, user?.username ?: "", user?.displayName ?: "")
         }, {
             Log.e(TAG, "acceptRequest failure", it)
         })
     }
 
     fun declineRequest(reqId: String) {
-        repository.declineFriendRequest(reqId, {}, {})
+        val requestItem = _uiState.value.incomingRequests.find { it.request.id == reqId }
+        val senderUid = requestItem?.request?.senderUid ?: ""
+        val username = requestItem?.user?.username ?: ""
+        val displayName = requestItem?.user?.displayName ?: ""
+        
+        repository.declineFriendRequest(reqId, {
+            clearFriendNotification(senderUid, username, displayName)
+        }, {})
     }
 
     fun cancelRequest(reqId: String) {
@@ -156,8 +169,14 @@ class FriendsViewModel : ViewModel() {
     }
 
     fun blockUser(uid: String) {
+        val friendItem = _uiState.value.friends.find { it.uid == uid }
+        val reqItem = _uiState.value.incomingRequests.find { it.user.uid == uid }
+        val username = friendItem?.username ?: reqItem?.user?.username ?: ""
+        val displayName = friendItem?.displayName ?: reqItem?.user?.displayName ?: ""
+
         repository.blockUser(uid, {
             _uiState.update { it.copy(showBlockConfirmation = null, message = "User blocked") }
+            clearFriendNotification(uid, username, displayName)
         }, {})
     }
 
@@ -177,11 +196,65 @@ class FriendsViewModel : ViewModel() {
             accept = accept,
             onSuccess = {
                 _uiState.update { it.copy(message = if (accept) "Joined circle" else "Invite declined") }
+                clearCircleNotification(invite.circleId, invite.circleName)
             },
             onError = { e: Exception ->
                 _uiState.update { it.copy(message = e.message) }
             }
         )
+    }
+
+    private fun clearFriendNotification(uid: String, fallbackUsername: String, fallbackDisplayName: String) {
+        val currentUid = auth.currentUser?.uid ?: return
+        db.collection("users").document(currentUid).collection("notifications")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                snapshot.documents.forEach { doc ->
+                    val docType = doc.getString("type") ?: ""
+                    val docBody = doc.getString("body") ?: ""
+                    val docTitle = doc.getString("title") ?: ""
+                    val docSenderUid = doc.getString("senderUid")
+                    
+                    val text = "$docTitle $docBody"
+                    val isFriendType = docType.contains("friend", ignoreCase = true) || docType.isEmpty()
+                    
+                    val matchUid = (docSenderUid == uid)
+                    val matchUsername = fallbackUsername.isNotBlank() && text.contains(fallbackUsername, ignoreCase = true)
+                    val matchDisplayName = fallbackDisplayName.isNotBlank() && text.contains(fallbackDisplayName, ignoreCase = true)
+                    
+                    if (isFriendType && (matchUid || matchUsername || matchDisplayName)) {
+                        batch.delete(doc.reference)
+                    }
+                }
+                batch.commit()
+            }
+    }
+
+    private fun clearCircleNotification(circleId: String, fallbackName: String) {
+        val currentUid = auth.currentUser?.uid ?: return
+        db.collection("users").document(currentUid).collection("notifications")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                snapshot.documents.forEach { doc ->
+                    val docType = doc.getString("type") ?: ""
+                    val docCircleId = doc.getString("circleId")
+                    val docTitle = doc.getString("title") ?: ""
+                    val docBody = doc.getString("body") ?: ""
+                    
+                    val text = "$docTitle $docBody"
+                    val isCircleType = docType.contains("circle", ignoreCase = true) || docType.isEmpty() || docType.contains("invite", ignoreCase = true)
+                    
+                    val matchId = (docCircleId == circleId)
+                    val matchText = fallbackName.isNotBlank() && text.contains(fallbackName, ignoreCase = true)
+                    
+                    if (isCircleType && (matchId || matchText)) {
+                        batch.delete(doc.reference)
+                    }
+                }
+                batch.commit()
+            }
     }
 
     fun setSelectedTab(tab: Int) {

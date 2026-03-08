@@ -123,6 +123,7 @@ export const onFriendRequestCreated = onDocumentCreated(
       body: body,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       type: "friend_request",
+      senderUid: senderUid,
     });
 
     // 2) Send Push Notification (if token exists)
@@ -178,6 +179,7 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       body: body,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       type: "friend_request_accepted",
+      senderUid: receiverUid,
     });
 
     await batch.commit();
@@ -205,8 +207,10 @@ export const onCircleInviteCreated = onDocumentCreated(
     if (!data) return;
 
     const inviteeUid = data.inviteeUid;
+    const inviterUid = data.inviterUid;
     const inviterName = data.inviterName;
     const circleName = data.circleName;
+    const circleId = data.circleId;
 
     const db = admin.firestore();
     const title = "New Circle Invite";
@@ -217,6 +221,8 @@ export const onCircleInviteCreated = onDocumentCreated(
       body: body,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       type: "circle_invite",
+      senderUid: inviterUid,
+      circleId: circleId,
     });
 
     const userSnap = await db.doc(`users/${inviteeUid}`).get();
@@ -262,6 +268,8 @@ export const onPhotoAdded = onDocumentCreated(
         body: body,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         type: "new_photo",
+        senderUid: uploaderUid,
+        circleId: circleId,
       });
     }
 
