@@ -1,6 +1,7 @@
 package com.crcleapp.crcle
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -33,14 +34,36 @@ import com.crcleapp.crcle.ui.views.CircleSettingsView
 import com.crcleapp.crcle.ui.views.FriendsView
 import com.crcleapp.crcle.ui.views.ProfileView
 import com.crcleapp.crcle.ui.views.SettingsView
+import com.crcleapp.crcle.ui.views.NotificationsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.crcleapp.crcle.ui.views.AuthView
 import com.crcleapp.crcle.ui.viewmodels.AuthViewModel
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // --- TEST NOTIFICATIONS SETUP ---
+        FirebaseMessaging.getInstance().subscribeToTopic("test_notifications")
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) Log.d("FCM", "Subscribed to test_notifications")
+            }
+
+        // Save token to user doc whenever it changes or on app start
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                if (uid != null && token != null) {
+                    FirebaseFirestore.getInstance().collection("users").document(uid)
+                        .update("fcmToken", token)
+                }
+            }
+        }
+
         setContent {
             val mainViewModel: MainViewModel = viewModel()
             val useSystemTheme by mainViewModel.useSystemTheme.collectAsState(initial = true)
@@ -74,6 +97,14 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     DisposableEffect(auth) {
         val listener = FirebaseAuth.AuthStateListener {
             currentUser = it.currentUser
+            
+            // Sync token on login
+            if (it.currentUser != null) {
+                FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                    FirebaseFirestore.getInstance().collection("users").document(it.currentUser!!.uid)
+                        .update("fcmToken", token)
+                }
+            }
         }
         auth.addAuthStateListener(listener)
         onDispose {
@@ -169,7 +200,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                                 navController.navigate("circle/$newCircleId")
                             },
                             onInvitesClick = {
-                                navController.navigate("friends?tab=2")
+                                navController.navigate("notifications")
                             },
                             onCameraClick = {
                                 coroutineScope.launch { pagerState.animateScrollToPage(0) }
@@ -282,6 +313,19 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             FriendsView(
                 onBack = { navController.popBackStack() },
                 initialTab = initialTab
+            )
+        }
+
+        // -------- Notifications --------
+        composable("notifications") {
+            NotificationsView(
+                onBack = { navController.popBackStack() },
+                onNavigateToFriends = { tab ->
+                    navController.navigate("friends?tab=$tab")
+                },
+                onNavigateToCircle = { circleId ->
+                    navController.navigate("circle/$circleId")
+                }
             )
         }
     }
