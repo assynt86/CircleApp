@@ -2,6 +2,7 @@ package com.crcleapp.crcle.ui.viewmodels
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crcleapp.crcle.data.FriendsRepository
@@ -47,11 +48,15 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     private val themePreferences = ThemePreferences(application)
     private val auth = FirebaseAuth.getInstance()
     private val storage = FirebaseStorage.getInstance()
+    private val TAG = "ProfileViewModel"
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
+        val currentUid = auth.currentUser?.uid
+        Log.e(TAG, "!!! CRITICAL LOG !!! Current User UID: $currentUid")
+        
         loadCurrentUser()
         viewModelScope.launch {
             savedPhotosStore.autoSaveFlow.collectLatest { enabled ->
@@ -82,6 +87,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(isLoading = true) }
             try {
                 val user = repository.getCurrentUser()
+                Log.e(TAG, "!!! CRITICAL LOG !!! Fetched User Profile: UID=${user?.uid}, Username=${user?.username}")
                 user?.let {
                     _uiState.update { state ->
                         state.copy(
@@ -96,6 +102,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Error loading current user", e)
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }

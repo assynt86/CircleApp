@@ -1,5 +1,6 @@
 package com.crcleapp.crcle.ui.viewmodels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.crcleapp.crcle.data.Circle
@@ -36,39 +37,65 @@ class FriendsViewModel : ViewModel() {
     private val circleRepository = CircleRepository()
     private val _uiState = MutableStateFlow(FriendsUiState())
     val uiState = _uiState.asStateFlow()
+    private val TAG = "FriendsViewModel"
 
     init {
         viewModelScope.launch {
             repository.listenToFriends().collectLatest { friendUids ->
+                Log.d(TAG, "listenToFriends: received ${friendUids.size} uids")
                 repository.getUsers(friendUids, { friends ->
                     _uiState.update { it.copy(friends = friends) }
-                }, {})
+                }, {
+                    Log.e(TAG, "Error fetching friends profiles", it)
+                })
             }
         }
 
         viewModelScope.launch {
             repository.listenToIncomingRequests().collectLatest { requests ->
-                val senderUids = requests.map { it.senderUid }
+                Log.d(TAG, "listenToIncomingRequests: received ${requests.size} requests")
+                val senderUids = requests.map { it.senderUid }.filter { it.isNotEmpty() }
+                
+                if (senderUids.isEmpty()) {
+                    _uiState.update { it.copy(incomingRequests = emptyList()) }
+                    return@collectLatest
+                }
+
                 repository.getUsers(senderUids, { senders ->
-                    val combined = requests.mapNotNull { req ->
-                        val user = senders.find { it.uid == req.senderUid } ?: return@mapNotNull null
+                    Log.d(TAG, "Incoming mapping: found ${senders.size} profiles for ${senderUids.size} uids")
+                    val combined = requests.map { req ->
+                        val user = senders.find { it.uid == req.senderUid } 
+                            ?: UserProfile(uid = req.senderUid, username = "Unknown User", displayName = "Unknown User")
                         FriendRequestWithUser(req, user)
                     }
                     _uiState.update { it.copy(incomingRequests = combined) }
-                }, {})
+                }, {
+                    Log.e(TAG, "Error fetching incoming request profiles", it)
+                })
             }
         }
 
         viewModelScope.launch {
             repository.listenToOutgoingRequests().collectLatest { requests ->
-                val receiverUids = requests.map { it.receiverUid }
+                Log.d(TAG, "listenToOutgoingRequests: received ${requests.size} requests")
+                val receiverUids = requests.map { it.receiverUid }.filter { it.isNotEmpty() }
+
+                if (receiverUids.isEmpty()) {
+                    _uiState.update { it.copy(outgoingRequests = emptyList()) }
+                    return@collectLatest
+                }
+
                 repository.getUsers(receiverUids, { receivers ->
-                    val combined = requests.mapNotNull { req ->
-                        val user = receivers.find { it.uid == req.receiverUid } ?: return@mapNotNull null
+                    Log.d(TAG, "Outgoing mapping: found ${receivers.size} profiles for ${receiverUids.size} uids")
+                    val combined = requests.map { req ->
+                        val user = receivers.find { it.uid == req.receiverUid }
+                            ?: UserProfile(uid = req.receiverUid, username = "Unknown User", displayName = "Unknown User")
                         FriendRequestWithUser(req, user)
                     }
                     _uiState.update { it.copy(outgoingRequests = combined) }
-                }, {})
+                }, {
+                    Log.e(TAG, "Error fetching outgoing request profiles", it)
+                })
             }
         }
 
@@ -80,7 +107,7 @@ class FriendsViewModel : ViewModel() {
 
         circleRepository.getUserCircles(
             onSuccess = { circles -> _uiState.update { it.copy(userCircles = circles) } },
-            onError = {}
+            onError = { Log.e(TAG, "Error fetching user circles", it) }
         )
     }
 
@@ -91,18 +118,27 @@ class FriendsViewModel : ViewModel() {
     fun sendFriendRequest() {
         val username = _uiState.value.searchText
         if (username.isBlank()) return
+        Log.d(TAG, "sendFriendRequest triggered for username: $username")
         _uiState.update { it.copy(isLoading = true) }
         repository.sendFriendRequest(username, {
+            Log.d(TAG, "sendFriendRequest success")
             _uiState.update { it.copy(isLoading = false, message = "Successfully sent friend request", searchText = "") }
         }, { e ->
+            Log.e(TAG, "sendFriendRequest error", e)
             _uiState.update { it.copy(isLoading = false, message = e.message) }
         }, {
+            Log.d(TAG, "sendFriendRequest: user not found")
             _uiState.update { it.copy(isLoading = false, message = "No user found") }
         })
     }
 
     fun acceptRequest(req: FriendRequest) {
-        repository.acceptFriendRequest(req, {}, {})
+        Log.d(TAG, "acceptRequest: ${req.id}")
+        repository.acceptFriendRequest(req, {
+            Log.d(TAG, "acceptRequest success")
+        }, {
+            Log.e(TAG, "acceptRequest failure", it)
+        })
     }
 
     fun declineRequest(reqId: String) {

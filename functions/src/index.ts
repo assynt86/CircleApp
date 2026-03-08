@@ -108,6 +108,7 @@ export const onFriendRequestCreated = onDocumentCreated(
 
     const receiverUid = data.receiverUid;
     const senderUid = data.senderUid;
+    console.log(`Friend request created: ${senderUid} -> ${receiverUid}`);
 
     const db = admin.firestore();
     const senderSnap = await db.doc(`user_public/${senderUid}`).get();
@@ -128,10 +129,13 @@ export const onFriendRequestCreated = onDocumentCreated(
     const userSnap = await db.doc(`users/${receiverUid}`).get();
     const token = userSnap.data()?.fcmToken;
     if (token) {
+      console.log(`Sending push notification to ${receiverUid}`);
       await admin.messaging().send({
         token: token,
         notification: {title, body},
       });
+    } else {
+      console.log(`No FCM token found for ${receiverUid}`);
     }
   }
 );
@@ -149,6 +153,7 @@ export const onFriendRequestAccepted = onDocumentUpdated(
 
     const senderUid = after.senderUid;
     const receiverUid = after.receiverUid;
+    console.log(`Friend request accepted: ${senderUid} <-> ${receiverUid}`);
 
     const db = admin.firestore();
     const batch = db.batch();
@@ -176,15 +181,19 @@ export const onFriendRequestAccepted = onDocumentUpdated(
     });
 
     await batch.commit();
+    console.log("Successfully updated friends lists and created notification document.");
 
     // Send Push
     const senderDoc = await db.doc(`users/${senderUid}`).get();
     const token = senderDoc.data()?.fcmToken;
     if (token) {
+      console.log(`Sending acceptance push notification to ${senderUid}`);
       await admin.messaging().send({
         token: token,
         notification: {title, body},
       });
+    } else {
+      console.log(`No FCM token found for ${senderUid}`);
     }
   }
 );
