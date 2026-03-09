@@ -60,6 +60,37 @@ async function sendTestPings() {
   console.log(`Sent test ping to ${usersSnap.size} users and topic.`);
 }
 
+/** Transitions circles from 'open' to 'closed' once closeAt timestamp is reached. */
+export const closeExpiredCircles = onSchedule("every 30 minutes", async () => {
+  const db = admin.firestore();
+  const now = admin.firestore.Timestamp.now();
+
+  // Find circles that are still 'open' but have passed their closeAt time
+  const circlesSnap = await db
+    .collection("circles")
+    .where("status", "==", "open")
+    .where("closeAt", "<=", now)
+    .limit(50)
+    .get();
+
+  if (circlesSnap.empty) return;
+
+  const batch = db.batch();
+  for (const doc of circlesSnap.docs) {
+    // Update main circle doc
+    batch.update(doc.ref, {status: "closed"});
+
+    // Update corresponding circle_code doc if it exists
+    const inviteCode = doc.data().inviteCode;
+    if (inviteCode) {
+      batch.update(db.collection("circle_codes").doc(inviteCode), {status: "closed"});
+    }
+  }
+
+  await batch.commit();
+  console.log(`Closed ${circlesSnap.size} expired circles.`);
+});
+
 export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => {
   const db = admin.firestore();
   const bucket = admin.storage().bucket();
@@ -78,6 +109,7 @@ export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => 
 
   for (const circleDoc of circlesSnap.docs) {
     const circleId = circleDoc.id;
+    const inviteCode = circleDoc.data().inviteCode;
 
     // 1) Delete all files in Storage under circles/{circleId}/
     const [files] = await bucket.getFiles({prefix: `circles/${circleId}/`});
@@ -93,8 +125,18 @@ export const cleanupExpiredCircles = onSchedule("every 60 minutes", async () => 
     const batch = db.batch();
     photosSnap.docs.forEach((d) => batch.delete(d.ref));
 
-    // 3) Mark circle cleanedUp so it won’t run again
-    batch.update(circleDoc.ref, {cleanedUp: true});
+    // 3) Mark circle cleanedUp and update status to expired
+    batch.update(circleDoc.ref, {
+      cleanedUp: true,
+      status: "expired",
+    });
+
+    // 4) Update circle_codes to expired
+    if (inviteCode) {
+      batch.update(db.collection("circle_codes").doc(inviteCode), {
+        status: "expired",
+      });
+    }
 
     await batch.commit();
   }
