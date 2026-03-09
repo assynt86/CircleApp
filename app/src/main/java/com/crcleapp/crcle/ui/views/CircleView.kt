@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -321,14 +322,15 @@ fun CircleViewContent(
     }
 
     if (uiState.showInviteDialog && uiState.circleInfo != null) {
+        val onSurfaceColor = MaterialTheme.colorScheme.onSurface.toArgb()
         AlertDialog(
             onDismissRequest = { onShowInviteDialog(false) },
             title = { Text("Invite to ${uiState.circleInfo?.name}", fontFamily = LeagueSpartan, fontWeight = FontWeight.Bold) },
             text = {
                 val inviteCode = uiState.circleInfo!!.inviteCode
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    val bitmap = remember(inviteCode) {
-                        generateQRCode(inviteCode)
+                    val bitmap = remember(inviteCode, onSurfaceColor) {
+                        generateQRCode(inviteCode, dotColor = onSurfaceColor)
                     }
                     if (bitmap != null) {
                         Box(

@@ -317,7 +317,7 @@ fun HomeViewContent(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.95f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .height(80.dp)
             ) {
@@ -334,7 +334,7 @@ fun HomeViewContent(
                             imageVector = Icons.Default.PhotoCamera,
                             contentDescription = "Camera",
                             modifier = Modifier.size(36.dp),
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -352,7 +352,7 @@ fun HomeViewContent(
                             imageVector = Icons.Default.Person,
                             contentDescription = "Profile",
                             modifier = Modifier.size(36.dp),
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -615,7 +615,7 @@ fun JoinPreviewDialog(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text("Join", fontFamily = LeagueSpartan)
                     }

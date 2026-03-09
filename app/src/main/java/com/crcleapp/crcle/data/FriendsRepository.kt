@@ -159,10 +159,6 @@ class FriendsRepository {
         val uid = currentUid ?: return
         Log.d(TAG, "acceptFriendRequest: requestId=${request.id}")
         
-        // Reverted to update status + update local friends.
-        // Batch deleting friend requests might fail if permissions are strict on the sender side or if simple updates are expected.
-        // We will stick to the standard flow: Accept = update status to accepted.
-        
         val batch = db.batch()
         val requestRef = db.collection("friend_requests").document(request.id)
         batch.update(requestRef, "status", "accepted")
@@ -176,7 +172,6 @@ class FriendsRepository {
     }
 
     fun declineFriendRequest(requestId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        // Decline = Delete. This keeps the DB clean.
         db.collection("friend_requests").document(requestId)
             .delete()
             .addOnSuccessListener { onSuccess() }
@@ -184,7 +179,6 @@ class FriendsRepository {
     }
 
     fun cancelFriendRequest(requestId: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
-        // Cancel = Delete.
         db.collection("friend_requests").document(requestId)
             .delete()
             .addOnSuccessListener { onSuccess() }
@@ -193,14 +187,57 @@ class FriendsRepository {
 
     fun removeFriend(friendUid: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
         val uid = currentUid ?: return
-        val batch = db.batch()
-        val userRef = db.collection("users").document(uid)
-        // We can only reliably update our own list client-side
-        batch.update(userRef, "friends", FieldValue.arrayRemove(friendUid))
+        Log.d(TAG, "removeFriend: initiative from $uid to remove $friendUid")
+        
+        // 1. Remove from local user's list
+        db.collection("users").document(uid)
+            .update("friends", FieldValue.arrayRemove(friendUid))
+            .addOnSuccessListener {
+                Log.d(TAG, "removeFriend: local removal success. Now seeking request doc to trigger Cloud Function.")
 
-        batch.commit()
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it) }
+                // 2. Find the "accepted" request document to delete it.
+                // We perform two separate queries to avoid complex Filters that require composite indexes.
+                db.collection("friend_requests")
+                    .whereEqualTo("senderUid", uid)
+                    .whereEqualTo("receiverUid", friendUid)
+                    .whereEqualTo("status", "accepted")
+                    .get()
+                    .addOnSuccessListener { snapshot1 ->
+                        if (!snapshot1.isEmpty) {
+                            Log.d(TAG, "removeFriend: found request doc (direction A->B). Deleting...")
+                            snapshot1.documents.forEach { it.reference.delete() }
+                            onSuccess()
+                        } else {
+                            // Try the other direction
+                            db.collection("friend_requests")
+                                .whereEqualTo("senderUid", friendUid)
+                                .whereEqualTo("receiverUid", uid)
+                                .whereEqualTo("status", "accepted")
+                                .get()
+                                .addOnSuccessListener { snapshot2 ->
+                                    if (!snapshot2.isEmpty) {
+                                        Log.d(TAG, "removeFriend: found request doc (direction B->A). Deleting...")
+                                        snapshot2.documents.forEach { it.reference.delete() }
+                                    } else {
+                                        Log.w(TAG, "removeFriend: no accepted request doc found in either direction. Other side may not be updated automatically.")
+                                    }
+                                    onSuccess()
+                                }
+                                .addOnFailureListener { e ->
+                                    Log.e(TAG, "removeFriend: direction 2 query failed", e)
+                                    onSuccess()
+                                }
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "removeFriend: direction 1 query failed", e)
+                        onSuccess()
+                    }
+            }
+            .addOnFailureListener { 
+                Log.e(TAG, "removeFriend: local removal failed", it)
+                onError(it) 
+            }
     }
 
     fun blockUser(targetUid: String, onSuccess: () -> Unit, onError: (Exception) -> Unit) {
@@ -234,7 +271,6 @@ class FriendsRepository {
             .addOnFailureListener { onError(it) }
     }
 
-    // Other methods remain unchanged
     fun listenToBlockedUsers(): Flow<List<String>> = callbackFlow {
         val uid = currentUid ?: return@callbackFlow
         val listener = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
