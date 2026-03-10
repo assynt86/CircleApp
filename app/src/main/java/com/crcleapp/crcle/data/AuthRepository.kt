@@ -3,7 +3,6 @@ package com.crcleapp.crcle.data
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.tasks.await
 
 /**
  * AuthRepository:
@@ -19,33 +18,6 @@ class AuthRepository(
     fun isSignedIn(): Boolean = auth.currentUser != null
     fun currentUid(): String? = auth.currentUser?.uid
     fun signOut() = auth.signOut()
-
-    suspend fun isEmailTaken(email: String): Boolean {
-        val snapshot = db.collection("users")
-            .whereEqualTo("email", email.trim())
-            .limit(1)
-            .get()
-            .await()
-        return !snapshot.isEmpty
-    }
-
-    suspend fun isUsernameTaken(username: String): Boolean {
-        val snapshot = db.collection("users")
-            .whereEqualTo("username", username.trim())
-            .limit(1)
-            .get()
-            .await()
-        return !snapshot.isEmpty
-    }
-
-    suspend fun isPhoneTaken(phone: String): Boolean {
-        val snapshot = db.collection("users")
-            .whereEqualTo("phone", phone.trim())
-            .limit(1)
-            .get()
-            .await()
-        return !snapshot.isEmpty
-    }
 
     fun signUpWithEmail(
         email: String,
@@ -104,16 +76,8 @@ class AuthRepository(
     ) {
         val email = identifier.trim()
 
-        // Check if identifier is email, if not find email by username/phone
-        if (android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            loginWithEmail(email, password, onSuccess, onError)
-        } else {
-            // Try as username
-            findEmailAndLogin("username", email, password, onSuccess) {
-                // If username fails, try as phone
-                findEmailAndLogin("phone", email, password, onSuccess, onError)
-            }
-        }
+        // MVP: email/password only (no Firestore lookup before auth)
+        loginWithEmail(email, password, onSuccess, onError)
     }
 
     private fun loginWithEmail(
