@@ -94,6 +94,12 @@ fun AuthView(
                     onValueChange = authViewModel::updateEmail,
                     label = { Text("Email", fontFamily = LeagueSpartan) },
                     modifier = Modifier.fillMaxWidth(),
+                    isError = uiState.isEmailTaken,
+                    supportingText = {
+                        if (uiState.isEmailTaken) {
+                            Text("Email is already taken", fontFamily = LeagueSpartan)
+                        }
+                    },
                     shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
@@ -166,15 +172,15 @@ fun AuthView(
                 // USERNAME
                 OutlinedTextField(
                     value = uiState.username,
-                    onValueChange = { newValue ->
-                        // Only allow alphanumeric, underscore, and period
-                        val filtered = newValue.filter { char ->
-                            char.isLetterOrDigit() || char == '_' || char == '.'
-                        }
-                        authViewModel.updateUsername(filtered)
-                    },
+                    onValueChange = authViewModel::updateUsername,
                     label = { Text("Username", fontFamily = LeagueSpartan) },
                     modifier = Modifier.fillMaxWidth(),
+                    isError = uiState.isUsernameTaken,
+                    supportingText = {
+                        if (uiState.isUsernameTaken) {
+                            Text("Username is already taken", fontFamily = LeagueSpartan)
+                        }
+                    },
                     shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
@@ -192,6 +198,12 @@ fun AuthView(
                     onValueChange = authViewModel::updatePhone,
                     label = { Text("Phone", fontFamily = LeagueSpartan) },
                     modifier = Modifier.fillMaxWidth(),
+                    isError = uiState.isPhoneTaken,
+                    supportingText = {
+                        if (uiState.isPhoneTaken) {
+                            Text("Phone number is already taken", fontFamily = LeagueSpartan)
+                        }
+                    },
                     shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Phone,

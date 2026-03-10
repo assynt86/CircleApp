@@ -1,14 +1,18 @@
 package com.crcleapp.crcle.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.crcleapp.crcle.data.AuthRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * AuthUiState:
- * Stores input fields + loading + error message + current mode.
+ * Stores input fields + loading + error message + current mode + taken flags.
  */
 data class AuthUiState(
     val identifier: String = "", // Used for login (email, username, or phone)
@@ -19,7 +23,12 @@ data class AuthUiState(
     val displayName: String = "",
     val isLoading: Boolean = false,
     val error: String = "",
-    val mode: AuthMode = AuthMode.LOGIN
+    val mode: AuthMode = AuthMode.LOGIN,
+    
+    // Availability flags for Signup
+    val isEmailTaken: Boolean = false,
+    val isUsernameTaken: Boolean = false,
+    val isPhoneTaken: Boolean = false
 )
 
 enum class AuthMode {
@@ -37,13 +46,52 @@ class AuthViewModel(
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var emailCheckJob: Job? = null
+    private var usernameCheckJob: Job? = null
+    private var phoneCheckJob: Job? = null
+
     fun isSignedIn(): Boolean = repo.isSignedIn()
 
     fun updateIdentifier(v: String) { _uiState.update { it.copy(identifier = v, error = "") } }
-    fun updateEmail(v: String) { _uiState.update { it.copy(email = v, error = "") } }
+    
+    fun updateEmail(v: String) {
+        _uiState.update { it.copy(email = v, error = "", isEmailTaken = false) }
+        if (_uiState.value.mode == AuthMode.SIGNUP && v.isNotBlank()) {
+            emailCheckJob?.cancel()
+            emailCheckJob = viewModelScope.launch {
+                delay(500)
+                val isTaken = repo.isEmailTaken(v)
+                _uiState.update { it.copy(isEmailTaken = isTaken) }
+            }
+        }
+    }
+
+    fun updateUsername(v: String) {
+        val filtered = v.filter { char -> char.isLetterOrDigit() || char == '_' || char == '.' }
+        _uiState.update { it.copy(username = filtered, error = "", isUsernameTaken = false) }
+        if (_uiState.value.mode == AuthMode.SIGNUP && filtered.isNotBlank()) {
+            usernameCheckJob?.cancel()
+            usernameCheckJob = viewModelScope.launch {
+                delay(500)
+                val isTaken = repo.isUsernameTaken(filtered)
+                _uiState.update { it.copy(isUsernameTaken = isTaken) }
+            }
+        }
+    }
+
+    fun updatePhone(v: String) {
+        _uiState.update { it.copy(phone = v, error = "", isPhoneTaken = false) }
+        if (_uiState.value.mode == AuthMode.SIGNUP && v.isNotBlank()) {
+            phoneCheckJob?.cancel()
+            phoneCheckJob = viewModelScope.launch {
+                delay(500)
+                val isTaken = repo.isPhoneTaken(v)
+                _uiState.update { it.copy(isPhoneTaken = isTaken) }
+            }
+        }
+    }
+
     fun updatePassword(v: String) { _uiState.update { it.copy(password = v, error = "") } }
-    fun updateUsername(v: String) { _uiState.update { it.copy(username = v, error = "") } }
-    fun updatePhone(v: String) { _uiState.update { it.copy(phone = v, error = "") } }
     fun updateDisplayName(v: String) { _uiState.update { it.copy(displayName = v, error = "") } }
 
     fun toggleMode() {
@@ -75,6 +123,10 @@ class AuthViewModel(
             _uiState.update { it.copy(error = "Please enter a valid email address") }
             return false
         }
+        if (state.isEmailTaken) {
+            _uiState.update { it.copy(error = "Email is already taken") }
+            return false
+        }
         if (state.password.isBlank()) {
             _uiState.update { it.copy(error = "Password cannot be empty") }
             return false
@@ -91,8 +143,16 @@ class AuthViewModel(
             _uiState.update { it.copy(error = "Username cannot be empty") }
             return false
         }
+        if (state.isUsernameTaken) {
+            _uiState.update { it.copy(error = "Username is already taken") }
+            return false
+        }
         if (state.phone.isBlank()) {
             _uiState.update { it.copy(error = "Phone number cannot be empty") }
+            return false
+        }
+        if (state.isPhoneTaken) {
+            _uiState.update { it.copy(error = "Phone number is already taken") }
             return false
         }
         return true
