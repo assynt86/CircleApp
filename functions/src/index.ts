@@ -413,4 +413,3 @@ async function deleteCollection(
     snap = await col.limit(batchSize).get();
   }
 }
-
