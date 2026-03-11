@@ -36,15 +36,68 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
+import coil.request.ImageRequest
 import com.crcleapp.crcle.ui.components.ZoomableImage
 import com.crcleapp.crcle.ui.viewmodels.CircleUiState
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModel
 import com.crcleapp.crcle.ui.viewmodels.CircleViewModelFactory
 import com.crcleapp.crcle.ui.theme.LeagueSpartan
+
+@Composable
+fun VideoPlayer(
+    videoUrl: String?,
+    isCurrentPage: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            playWhenReady = false
+        }
+    }
+
+    LaunchedEffect(videoUrl) {
+        if (videoUrl != null) {
+            exoPlayer.setMediaItem(MediaItem.fromUri(videoUrl))
+            exoPlayer.prepare()
+        }
+    }
+
+    LaunchedEffect(isCurrentPage) {
+        if (isCurrentPage) {
+            exoPlayer.playWhenReady = true
+        } else {
+            exoPlayer.pause()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    AndroidView(
+        factory = {
+            PlayerView(context).apply {
+                player = exoPlayer
+                useController = true
+                setShowNextButton(false)
+                setShowPreviousButton(false)
+            }
+        },
+        modifier = modifier
+    )
+}
 
 @Composable
 fun CircleView(
@@ -83,7 +136,7 @@ fun CircleView(
         onSetFullscreenImage = { viewModel.onSetFullscreenImage(it) },
         onUploadPhoto = {
             multiplePhotoPickerLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
             )
         },
         onToggleSelectionMode = { viewModel.toggleSelectionMode() },
@@ -268,26 +321,57 @@ fun CircleViewContent(
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
                                 )
                             ) {
-                                Box(contentAlignment = Alignment.TopEnd) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    val request = if (p.mediaType == "video") {
+                                        ImageRequest.Builder(LocalContext.current)
+                                            .data(p.downloadUrl)
+                                            .decoderFactory(VideoFrameDecoder.Factory())
+                                            .build()
+                                    } else {
+                                        ImageRequest.Builder(LocalContext.current)
+                                            .data(p.downloadUrl)
+                                            .build()
+                                    }
+                                    
                                     AsyncImage(
-                                        model = p.downloadUrl,
-                                        contentDescription = "Circle photo",
+                                        model = request,
+                                        contentDescription = "Circle media",
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .aspectRatio(1f)
                                             .clip(MaterialTheme.shapes.medium),
                                         contentScale = ContentScale.Crop
                                     )
+                                    
+                                    if (p.mediaType == "video") {
+                                        Icon(
+                                            imageVector = Icons.Filled.Videocam,
+                                            contentDescription = "Video Icon",
+                                            tint = Color.White,
+                                            modifier = Modifier
+                                                .align(Alignment.TopStart)
+                                                .padding(6.dp)
+                                                .size(20.dp)
+                                        )
+                                    }
+                                    
                                     if (isSelected) {
                                         Icon(
                                             imageVector = Icons.Filled.CheckCircle,
                                             contentDescription = "Selected",
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(8.dp)
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(8.dp)
                                         )
                                     }
+                                    
                                     if (uiState.inProgressSaves.contains(p.id)) {
-                                        CircularProgressIndicator(modifier = Modifier.padding(4.dp))
+                                        CircularProgressIndicator(
+                                            modifier = Modifier
+                                                .align(Alignment.Center)
+                                                .padding(4.dp)
+                                        )
                                     }
                                 }
                             }
@@ -382,14 +466,23 @@ fun CircleViewContent(
                     pageSpacing = 16.dp,
                     beyondViewportPageCount = 2
                 ) { page ->
-                    ZoomableImage(
-                        model = uiState.photos[page].downloadUrl,
-                        contentDescription = "Full screen image",
-                        isCurrentPage = pagerState.currentPage == page,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                        onTap = { onSetFullscreenImage(null) }
-                    )
+                    val mediaItem = uiState.photos[page]
+                    if (mediaItem.mediaType == "video") {
+                        VideoPlayer(
+                            videoUrl = mediaItem.downloadUrl,
+                            isCurrentPage = pagerState.currentPage == page,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        ZoomableImage(
+                            model = mediaItem.downloadUrl,
+                            contentDescription = "Full screen image",
+                            isCurrentPage = pagerState.currentPage == page,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                            onTap = { onSetFullscreenImage(null) }
+                        )
+                    }
                 }
 
                 val currentPhoto = uiState.photos.getOrNull(pagerState.currentPage)

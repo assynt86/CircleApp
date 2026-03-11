@@ -66,7 +66,8 @@ data class Photo(
     val uploaderUid: String = "",
     val storagePath: String = "",
     val sizeBytes: Long = 0L,
-    val createdAt: Timestamp? = null
+    val createdAt: Timestamp? = null,
+    val mediaType: String = "image" // "image" or "video"
 )
 
 data class CircleInfo(
@@ -101,6 +102,7 @@ data class PhotoItem(
     val storagePath: String,
     val createdAt: Timestamp?,
     val sizeBytes: Long = 0L,
+    val mediaType: String = "image", // "image" or "video"
     var downloadUrl: String? = null,
     var uploaderName: String? = null
 )
