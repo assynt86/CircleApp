@@ -2,12 +2,15 @@ package com.crcleapp.crcle.ui.views
 
 import android.Manifest
 import android.net.Uri
+import android.util.Log
 import android.view.OrientationEventListener
 import android.view.Surface
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.*
+import androidx.camera.video.Recorder
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -15,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -41,8 +45,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -52,10 +54,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
+import coil.request.ImageRequest
 import com.crcleapp.crcle.R
+import com.crcleapp.crcle.ui.viewmodels.CameraMode
 import com.crcleapp.crcle.ui.viewmodels.CameraViewModel
 import com.crcleapp.crcle.ui.viewmodels.HomeViewModel
 import com.crcleapp.crcle.ui.viewmodels.TimerMode
@@ -63,12 +69,87 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
 
 val LeagueSpartan = FontFamily(
     Font(R.font.league_spartan_bold, FontWeight.Bold)
 )
+
+@Composable
+fun ModeToggleSwitch(
+    currentMode: CameraMode,
+    animatedRotation: Float,
+    onModeChanged: (CameraMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    
+    Box(
+        modifier = modifier
+            .width(100.dp)
+            .height(40.dp)
+            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .padding(4.dp)
+    ) {
+        val isPhoto = currentMode == CameraMode.PHOTO
+        val offsetTarget = if (isPhoto) 0f else 1f
+        val animatedOffset by animateFloatAsState(targetValue = offsetTarget, label = "toggle_offset")
+
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(0.5f)
+                .offset(x = 46.dp * animatedOffset)
+                .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+        )
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { 
+                        if (!isPhoto) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onModeChanged(CameraMode.PHOTO) 
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PhotoCamera,
+                    contentDescription = "Photo Mode",
+                    tint = if (isPhoto) Color.Black else Color.White,
+                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = animatedRotation }
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { 
+                        if (isPhoto) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onModeChanged(CameraMode.VIDEO) 
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Videocam,
+                    contentDescription = "Video Mode",
+                    tint = if (!isPhoto) Color.Black else Color.White,
+                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = animatedRotation }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun CameraView(
@@ -88,11 +169,16 @@ fun CameraView(
     val cameraUiState by cameraViewModel.uiState.collectAsState()
     
     var imageCapture: ImageCapture? by remember { mutableStateOf(null) }
+    var videoCapture: VideoCapture<Recorder>? by remember { mutableStateOf(null) }
+    var activeRecording: Recording? by remember { mutableStateOf(null) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     
+    // UI State for popups
+    var showEmptyCircleAlert by remember { mutableStateOf(false) }
+
     // Orientation tracking
-    var rotationDegrees by remember { mutableStateOf(0f) }
+    var rotationDegrees by remember { mutableFloatStateOf(0f) }
     var currentRotation by remember { mutableIntStateOf(Surface.ROTATION_0) }
     
     val animatedRotation by animateFloatAsState(
@@ -133,9 +219,9 @@ fun CameraView(
         }
     }
 
-    // Update ImageCapture rotation whenever currentRotation changes
-    LaunchedEffect(currentRotation, imageCapture) {
+    LaunchedEffect(currentRotation, imageCapture, videoCapture) {
         imageCapture?.targetRotation = currentRotation
+        videoCapture?.targetRotation = currentRotation
     }
 
     val focusAlpha by animateFloatAsState(
@@ -149,7 +235,6 @@ fun CameraView(
     val maxZoomRatio = zoomState?.maxZoomRatio ?: 1f
     val currentZoomRatio = zoomState?.zoomRatio ?: 1f
 
-    // Animation states
     var buttonPosition by remember { mutableStateOf(Offset.Zero) }
     var screenCenter by remember { mutableStateOf(Offset.Zero) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
@@ -191,26 +276,49 @@ fun CameraView(
         }
     }
 
-    // Automatic background retry if camera fails to load or takes too long
     LaunchedEffect(cameraUiState.cameraInitializationError, cameraUiState.isCameraReady, cameraUiState.retryTrigger) {
         if (cameraUiState.cameraInitializationError != null) {
-            delay(3000) // Wait 3 seconds before retrying on error
+            delay(3000) 
             cameraViewModel.retryCamera()
         } else if (!cameraUiState.isCameraReady && cameraUiState.hasPermission) {
-            delay(8000) // 8 second timeout for "stuck" initialization
+            delay(8000)
             if (!cameraUiState.isCameraReady) {
                 cameraViewModel.retryCamera()
             }
         }
     }
+    
+    // Video Recording Timer
+    LaunchedEffect(cameraUiState.isRecording) {
+        if (cameraUiState.isRecording) {
+            while (cameraUiState.recordingDurationSeconds < 90) {
+                delay(1000)
+                cameraViewModel.incrementRecordingDuration()
+            }
+            // Auto stop at 90 seconds
+            if (cameraUiState.isRecording) {
+                Log.d("CameraView", "Auto-stopping recording at 90 seconds")
+                activeRecording?.stop()
+                activeRecording = null
+            }
+        }
+    }
+
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted -> cameraViewModel.onAudioPermissionResult(isGranted) }
+    )
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted -> cameraViewModel.onPermissionResult(isGranted) }
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions -> 
+            cameraViewModel.onPermissionResult(permissions[Manifest.permission.CAMERA] == true)
+            cameraViewModel.onAudioPermissionResult(permissions[Manifest.permission.RECORD_AUDIO] == true)
+        }
     )
 
     LaunchedEffect(Unit) {
-        permissionLauncher.launch(Manifest.permission.CAMERA)
+        permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
         homeViewModel.handleCameraEntry(entryPointCircleId)
     }
 
@@ -219,7 +327,7 @@ fun CameraView(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Camera permission is required.", color = MaterialTheme.colorScheme.onBackground)
                 Spacer(Modifier.height(12.dp))
-                Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) {
                     Text("Grant Permission")
                 }
             }
@@ -313,7 +421,7 @@ fun CameraView(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (cameraUiState.timerMode != TimerMode.OFF) {
+                    if (cameraUiState.timerMode != TimerMode.OFF && cameraUiState.cameraMode == CameraMode.PHOTO) {
                         Text(
                             text = when(cameraUiState.timerMode) {
                                 TimerMode.FIVE -> "5s"
@@ -329,15 +437,17 @@ fun CameraView(
                                 .graphicsLayer { rotationZ = animatedRotation }
                         )
                     }
-                    IconButton(
-                        modifier = Modifier.graphicsLayer { rotationZ = animatedRotation },
-                        onClick = { cameraViewModel.toggleTimer() }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Timer,
-                            contentDescription = "Timer",
-                            tint = if (cameraUiState.timerMode != TimerMode.OFF) Color.Yellow else MaterialTheme.colorScheme.onBackground
-                        )
+                    if (cameraUiState.cameraMode == CameraMode.PHOTO) {
+                        IconButton(
+                            modifier = Modifier.graphicsLayer { rotationZ = animatedRotation },
+                            onClick = { cameraViewModel.toggleTimer() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Timer,
+                                contentDescription = "Timer",
+                                tint = if (cameraUiState.timerMode != TimerMode.OFF) Color.Yellow else MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                     }
                 }
             }
@@ -392,24 +502,33 @@ fun CameraView(
                                 try {
                                     val cameraProvider = cameraProviderFuture.get()
                                     val preview = Preview.Builder()
-                                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                                         .build().also { p ->
                                             p.setSurfaceProvider(view.surfaceProvider)
                                         }
+                                        
                                     val capture = ImageCapture.Builder()
-                                        .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                                         .setFlashMode(cameraUiState.flashMode)
                                         .setTargetRotation(currentRotation)
                                         .build()
                                     imageCapture = capture
 
+                                    val recorder = Recorder.Builder()
+                                        .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+                                        .build()
+                                    val vidCapture = VideoCapture.withOutput(recorder)
+                                    vidCapture.targetRotation = currentRotation
+                                    videoCapture = vidCapture
+                                    
+                                    Log.d("CameraView", "Camera and VideoCapture successfully bound")
+
                                     cameraProvider.unbindAll()
                                     camera = cameraProvider.bindToLifecycle(
                                         lifecycleOwner,
                                         CameraSelector.Builder().requireLensFacing(cameraUiState.lensFacing).build(),
                                         preview,
-                                        capture
+                                        capture,
+                                        vidCapture
                                     )
                                     cameraViewModel.setCameraReady(true)
                                 } catch (e: Exception) {
@@ -484,6 +603,32 @@ fun CameraView(
                         )
                     }
                 }
+                
+                if (cameraUiState.isRecording) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 16.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Canvas(modifier = Modifier.size(8.dp)) {
+                                drawCircle(Color.Red)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            val mins = cameraUiState.recordingDurationSeconds / 60
+                            val secs = cameraUiState.recordingDurationSeconds % 60
+                            Text(
+                                text = String.format(Locale.US, "%02d:%02d / 01:30", mins, secs),
+                                color = Color.White,
+                                fontFamily = LeagueSpartan,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.graphicsLayer { rotationZ = animatedRotation }
+                            )
+                        }
+                    }
+                }
 
                 Box(
                     modifier = Modifier
@@ -524,7 +669,7 @@ fun CameraView(
             }
         }
 
-        // Bottom Controls
+        // Bottom Controls Container
         val screenWidth = configuration.screenWidthDp.dp
         val circlesBtnSize = (screenWidth * 0.18f).coerceIn(48.dp, 80.dp)
         val captureBtnSize = (screenWidth * 0.25f).coerceIn(60.dp, 110.dp)
@@ -533,173 +678,204 @@ fun CameraView(
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
         ) {
-            // Helper Container for side buttons to find midpoint between wall and capture button edge
-            Box(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
+                // Mode Toggle exactly at the top of the lower section
+                if (!cameraUiState.isRecording && !cameraUiState.isCapturing) {
+                    ModeToggleSwitch(
+                        currentMode = cameraUiState.cameraMode,
+                        animatedRotation = animatedRotation,
+                        onModeChanged = { cameraViewModel.setCameraMode(it) }
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(40.dp)) // Maintain visual spacing
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Bottom Buttons Row (Circles, Capture, Flip)
+                Box(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Left midpoint box (Wall to Capture edge)
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Left midpoint box
                         Box(
-                            modifier = Modifier
-                                .size(circlesBtnSize)
-                                .onGloballyPositioned { coords ->
-                                    val pos = coords.positionInRoot()
-                                    buttonPosition = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
-                                }
-                                .clickable { cameraViewModel.setShowCirclesPopup(true) }
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer { rotationZ = animatedRotation },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            if (!cameraUiState.isRecording) {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .border(2.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
+                                        .size(circlesBtnSize)
+                                        .onGloballyPositioned { coords ->
+                                            val pos = coords.positionInRoot()
+                                            buttonPosition = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
+                                        }
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { cameraViewModel.setShowCirclesPopup(true) }
                                 ) {
-                                    // Triple Venn Diagram Icon
-                                    val tintColor = MaterialTheme.colorScheme.onBackground
-                                    Canvas(modifier = Modifier.fillMaxSize(0.55f)) {
-                                        val r = size.minDimension / 3f
-                                        val center = Offset(size.width / 2, size.height / 2)
-                                        
-                                        // Top circle
-                                        drawCircle(
-                                            color = tintColor,
-                                            radius = r,
-                                            center = Offset(center.x, center.y - r * 0.5f),
-                                            style = Stroke(width = 2.5.dp.toPx())
-                                        )
-                                        // Bottom left circle
-                                        drawCircle(
-                                            color = tintColor,
-                                            radius = r,
-                                            center = Offset(center.x - r * 0.45f, center.y + r * 0.35f),
-                                            style = Stroke(width = 2.5.dp.toPx())
-                                        )
-                                        // Bottom right circle
-                                        drawCircle(
-                                            color = tintColor,
-                                            radius = r,
-                                            center = Offset(center.x + r * 0.45f, center.y + r * 0.35f),
-                                            style = Stroke(width = 2.5.dp.toPx())
-                                        )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer { rotationZ = animatedRotation },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .border(2.dp, MaterialTheme.colorScheme.onBackground, CircleShape)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            val tintColor = MaterialTheme.colorScheme.onBackground
+                                            Canvas(modifier = Modifier.fillMaxSize(0.55f)) {
+                                                val r = size.minDimension / 3f
+                                                val center = Offset(size.width / 2, size.height / 2)
+                                                drawCircle(color = tintColor, radius = r, center = Offset(center.x, center.y - r * 0.5f), style = Stroke(width = 2.5.dp.toPx()))
+                                                drawCircle(color = tintColor, radius = r, center = Offset(center.x - r * 0.45f, center.y + r * 0.35f), style = Stroke(width = 2.5.dp.toPx()))
+                                                drawCircle(color = tintColor, radius = r, center = Offset(center.x + r * 0.45f, center.y + r * 0.35f), style = Stroke(width = 2.5.dp.toPx()))
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    
-                    // Invisible spacer for the capture button area
-                    Spacer(modifier = Modifier.size(captureBtnSize))
-
-                    // Right midpoint box (Capture edge to Wall)
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        IconButton(
-                            modifier = Modifier
-                                .size(flipBtnSize)
-                                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape),
-                            onClick = { cameraViewModel.toggleLensFacing() }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.FlipCameraAndroid,
-                                contentDescription = "Flip camera",
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier
-                                    .size(flipBtnSize * 0.6f) // Proportional icon size
-                                    .graphicsLayer { rotationZ = animatedRotation }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Actual Capture Button at the physical center
-            IconButton(
-                modifier = Modifier
-                    .size(captureBtnSize)
-                    .border(5.dp, MaterialTheme.colorScheme.onBackground, CircleShape),
-                onClick = {
-                    if (cameraUiState.isCapturing || cameraUiState.remainingSeconds > 0) return@IconButton
-                    
-                    coroutineScope.launch {
-                        if (cameraUiState.timerMode != TimerMode.OFF) {
-                            var seconds = cameraUiState.timerMode.seconds
-                            while (seconds > 0) {
-                                cameraViewModel.setRemainingSeconds(seconds)
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                delay(1000)
-                                seconds--
-                            }
-                            cameraViewModel.setRemainingSeconds(0)
-                        }
                         
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        cameraViewModel.triggerFlashEffect()
-                        val capture = imageCapture ?: return@launch
+                        Spacer(modifier = Modifier.size(captureBtnSize))
 
-                        cameraViewModel.setCapturing(true)
-
-                        val photoFile = File(
-                            context.cacheDir,
-                            "photo_${System.currentTimeMillis()}.jpg"
-                        )
-
-                        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-
-                        capture.takePicture(
-                            outputOptions,
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageSavedCallback {
-                                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                    cameraViewModel.setCapturing(false)
-                                    val savedUri = Uri.fromFile(photoFile)
-                                    cameraViewModel.onPhotoCaptured(savedUri)
-                                    homeViewModel.uploadPhotoToCircles(
-                                        uri = savedUri,
-                                        onUploadsComplete = onUploadsComplete,
-                                        onUploadFailed = onUploadFailed
+                        // Right midpoint box
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!cameraUiState.isRecording) {
+                                IconButton(
+                                    modifier = Modifier
+                                        .size(flipBtnSize)
+                                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f), CircleShape),
+                                    onClick = { cameraViewModel.toggleLensFacing() }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.FlipCameraAndroid,
+                                        contentDescription = "Flip camera",
+                                        tint = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier
+                                            .size(flipBtnSize * 0.6f)
+                                            .graphicsLayer { rotationZ = animatedRotation }
                                     )
                                 }
-
-                                override fun onError(exc: ImageCaptureException) {
-                                    cameraViewModel.setCapturing(false)
-                                    onUploadFailed("Capture", exc.message ?: "Unknown error")
-                                }
                             }
+                        }
+                    }
+
+                    // Actual Capture Button at the physical center
+                    val outlineColor = MaterialTheme.colorScheme.onBackground
+                    val innerColor = if (cameraUiState.isRecording) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else if (cameraUiState.cameraMode == CameraMode.VIDEO) {
+                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
+                    } else {
+                        Color.Transparent
+                    }
+                    val iconVector = if (cameraUiState.isRecording) Icons.Filled.Stop else (if (cameraUiState.cameraMode == CameraMode.VIDEO) Icons.Filled.Videocam else Icons.Filled.Camera)
+                    val iconTint = if (cameraUiState.isRecording) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onBackground
+
+                    Box(
+                        modifier = Modifier
+                            .size(captureBtnSize)
+                            .clip(CircleShape)
+                            .border(5.dp, outlineColor, CircleShape)
+                            .background(innerColor, CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                Log.d("CameraView", "Capture button clicked. Mode: ${cameraUiState.cameraMode}, isRecording: ${cameraUiState.isRecording}, videoCapture null? ${videoCapture == null}")
+                                
+                                if (homeUiState.selectedCircleIds.isEmpty()) {
+                                    showEmptyCircleAlert = true
+                                    return@clickable
+                                }
+                                if (cameraUiState.isCapturing || cameraUiState.remainingSeconds > 0) return@clickable
+                                
+                                if (cameraUiState.cameraMode == CameraMode.PHOTO) {
+                                    coroutineScope.launch {
+                                        if (cameraUiState.timerMode != TimerMode.OFF) {
+                                            var seconds = cameraUiState.timerMode.seconds
+                                            while (seconds > 0) {
+                                                cameraViewModel.setRemainingSeconds(seconds)
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                delay(1000)
+                                                seconds--
+                                            }
+                                            cameraViewModel.setRemainingSeconds(0)
+                                        }
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        cameraViewModel.triggerFlashEffect()
+                                        val capture = imageCapture ?: return@launch
+                                        cameraViewModel.setCapturing(true)
+                                        val photoFile = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+                                        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                                        capture.takePicture(
+                                            outputOptions,
+                                            ContextCompat.getMainExecutor(context),
+                                            object : ImageCapture.OnImageSavedCallback {
+                                                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                                    cameraViewModel.setCapturing(false)
+                                                    val savedUri = Uri.fromFile(photoFile)
+                                                    cameraViewModel.onPhotoCaptured(savedUri)
+                                                    homeViewModel.uploadPhotoToCircles(savedUri, "image", onUploadsComplete, onUploadFailed)
+                                                }
+                                                override fun onError(exc: ImageCaptureException) {
+                                                    cameraViewModel.setCapturing(false)
+                                                    onUploadFailed("Capture", exc.message ?: "Unknown error")
+                                                }
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    // Video Mode
+                                    if (cameraUiState.isRecording) {
+                                        Log.d("CameraView", "Attempting to stop recording...")
+                                        activeRecording?.stop()
+                                        activeRecording = null
+                                    } else {
+                                        Log.d("CameraView", "Attempting to start recording...")
+                                        if (!cameraUiState.hasAudioPermission) {
+                                            Log.d("CameraView", "No audio permission, requesting...")
+                                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        } else {
+                                            startRecording(context, videoCapture, cameraViewModel, homeViewModel, onUploadsComplete, onUploadFailed) { recording ->
+                                                activeRecording = recording
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = iconVector,
+                            contentDescription = if (cameraUiState.isRecording) "Stop Recording" else "Capture",
+                            tint = iconTint,
+                            modifier = Modifier
+                                .size(captureBtnSize * 0.5f)
+                                .graphicsLayer { rotationZ = animatedRotation }
                         )
                     }
-                },
-                enabled = !cameraUiState.isCapturing && homeUiState.selectedCircleIds.isNotEmpty() && cameraUiState.isCameraReady
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Camera,
-                    contentDescription = "Capture photo",
-                    tint = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier
-                        .size(captureBtnSize * 0.7f) // Proportional icon size
-                        .graphicsLayer { rotationZ = animatedRotation }
-                )
+                }
             }
         }
 
@@ -712,9 +888,16 @@ fun CameraView(
             val currentAlpha = lerp(1f, 0f, t)
             
             val animSize = (containerSize.width * 0.8f).coerceAtMost(400f)
+            
+            val request = remember(cameraUiState.lastCapturedUri) {
+                ImageRequest.Builder(context)
+                    .data(cameraUiState.lastCapturedUri)
+                    .decoderFactory(VideoFrameDecoder.Factory())
+                    .build()
+            }
 
             AsyncImage(
-                model = cameraUiState.lastCapturedUri,
+                model = request,
                 contentDescription = null,
                 modifier = Modifier
                     .size(with(LocalDensity.current) { animSize.toDp() })
@@ -768,6 +951,99 @@ fun CameraView(
                 }
             )
         }
+
+        if (showEmptyCircleAlert) {
+            AlertDialog(
+                onDismissRequest = { showEmptyCircleAlert = false },
+                title = { Text("No Circle Selected") },
+                text = { Text("Please select at least one circle to capture a photo or video.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showEmptyCircleAlert = false
+                        cameraViewModel.setShowCirclesPopup(true)
+                    }) {
+                        Text("Select")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEmptyCircleAlert = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+}
+
+private fun startRecording(
+    context: android.content.Context,
+    videoCapture: VideoCapture<Recorder>?,
+    cameraViewModel: CameraViewModel,
+    homeViewModel: HomeViewModel,
+    onUploadsComplete: () -> Unit,
+    onUploadFailed: (String, String) -> Unit,
+    onRecordingStarted: (Recording) -> Unit
+) {
+    Log.d("CameraView", "startRecording function called. videoCapture is null? ${videoCapture == null}")
+    val capture = videoCapture ?: return
+
+    val videoFile = File(
+        context.cacheDir,
+        "video_${System.currentTimeMillis()}.mp4"
+    )
+
+    val outputOptions = FileOutputOptions.Builder(videoFile).build()
+
+    try {
+        val recording = capture.output
+            .prepareRecording(context, outputOptions)
+            .apply {
+                if (PermissionChecker.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PermissionChecker.PERMISSION_GRANTED) {
+                    Log.d("CameraView", "Audio enabled for recording")
+                    withAudioEnabled()
+                } else {
+                    Log.w("CameraView", "Recording WITHOUT audio - permission denied")
+                }
+            }
+            .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
+                Log.d("CameraView", "RecordEvent received: ${recordEvent.javaClass.simpleName}")
+                when (recordEvent) {
+                    is VideoRecordEvent.Start -> {
+                        Log.d("CameraView", "Recording started successfully")
+                        cameraViewModel.setRecording(true)
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        Log.d("CameraView", "Recording finalized. Error code: ${recordEvent.error}")
+                        cameraViewModel.setRecording(false)
+                        
+                        if (!recordEvent.hasError() || recordEvent.error == VideoRecordEvent.Finalize.ERROR_NONE) {
+                            val savedUri = Uri.fromFile(videoFile)
+                            Log.d("CameraView", "Recording successful. Saving to URI: $savedUri")
+                            cameraViewModel.onPhotoCaptured(savedUri)
+                            homeViewModel.uploadPhotoToCircles(
+                                uri = savedUri,
+                                mediaType = "video",
+                                onUploadsComplete = onUploadsComplete,
+                                onUploadFailed = onUploadFailed
+                            )
+                        } else {
+                            if (recordEvent.error != VideoRecordEvent.Finalize.ERROR_NO_VALID_DATA) {
+                                Log.e("CameraView", "Recording failed with error: ${recordEvent.error}")
+                                onUploadFailed("Capture", "Recording failed: ${recordEvent.error}")
+                            } else {
+                                Log.w("CameraView", "Recording had NO_VALID_DATA (likely too short)")
+                            }
+                        }
+                    }
+                }
+            }
+        onRecordingStarted(recording)
+    } catch (e: SecurityException) {
+        Log.e("CameraView", "SecurityException during recording setup", e)
+        onUploadFailed("Permission", "Audio permission required for video")
+    } catch (e: Exception) {
+        Log.e("CameraView", "Exception during recording setup", e)
+        onUploadFailed("Capture", e.localizedMessage ?: "Unknown setup error")
     }
 }
 

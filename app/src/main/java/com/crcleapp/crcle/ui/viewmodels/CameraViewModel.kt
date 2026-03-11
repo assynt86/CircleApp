@@ -14,9 +14,18 @@ enum class TimerMode(val seconds: Int) {
     OFF(0), FIVE(5), TEN(10)
 }
 
+enum class CameraMode {
+    PHOTO, VIDEO
+}
+
 data class CameraUiState(
     val hasPermission: Boolean = false,
+    val hasAudioPermission: Boolean = false,
     val isCapturing: Boolean = false,
+    val isRecording: Boolean = false,
+    val isLongPressRecording: Boolean = false, // Track if started via hold
+    val recordingDurationSeconds: Int = 0,
+    val cameraMode: CameraMode = CameraMode.PHOTO,
     val flashMode: Int = ImageCapture.FLASH_MODE_OFF,
     val zoomLevel: Float = 0f,
     val showZoomBar: Boolean = false,
@@ -40,6 +49,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onPermissionResult(isGranted: Boolean) {
         _uiState.update { it.copy(hasPermission = isGranted) }
+    }
+
+    fun onAudioPermissionResult(isGranted: Boolean) {
+        _uiState.update { it.copy(hasAudioPermission = isGranted) }
+    }
+
+    fun setCameraMode(mode: CameraMode) {
+        _uiState.update { it.copy(cameraMode = mode) }
     }
 
     fun setFlashMode(mode: Int) {
@@ -77,6 +94,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setCapturing(isCapturing: Boolean) {
         _uiState.update { it.copy(isCapturing = isCapturing) }
+    }
+
+    fun setRecording(isRecording: Boolean) {
+        _uiState.update { it.copy(isRecording = isRecording, recordingDurationSeconds = 0) }
+    }
+    
+    fun setLongPressRecording(isLongPress: Boolean) {
+        _uiState.update { it.copy(isLongPressRecording = isLongPress) }
+    }
+
+    fun incrementRecordingDuration() {
+        _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
     }
 
     fun triggerFlashEffect() {

@@ -322,14 +322,16 @@ fun CircleViewContent(
                                 )
                             ) {
                                 Box(modifier = Modifier.fillMaxSize()) {
-                                    val request = if (p.mediaType == "video") {
+                                    val request = if (p.mediaType == "video" && p.downloadUrl != null) {
                                         ImageRequest.Builder(LocalContext.current)
                                             .data(p.downloadUrl)
                                             .decoderFactory(VideoFrameDecoder.Factory())
+                                            .crossfade(true)
                                             .build()
                                     } else {
                                         ImageRequest.Builder(LocalContext.current)
                                             .data(p.downloadUrl)
+                                            .crossfade(true)
                                             .build()
                                     }
                                     
@@ -339,7 +341,8 @@ fun CircleViewContent(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .aspectRatio(1f)
-                                            .clip(MaterialTheme.shapes.medium),
+                                            .clip(MaterialTheme.shapes.medium)
+                                            .background(Color.Black.copy(alpha = 0.1f)), // fallback background
                                         contentScale = ContentScale.Crop
                                     )
                                     
