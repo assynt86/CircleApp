@@ -195,6 +195,7 @@ class CircleRepository {
     fun uploadPhotoToCircle(
         circleId: String,
         photoUri: Uri,
+        mediaType: String = "image", // "image" or "video"
         onSuccess: (photoId: String) -> Unit,
         onError: (Exception) -> Unit
     ) {
@@ -233,10 +234,15 @@ class CircleRepository {
 
                  // If we have space, proceed with upload.
                  val photoId = db.collection("tmp").document().id
-                 val storagePath = "circles/$circleId/$photoId.jpg"
+                 val extension = if (mediaType == "video") "mp4" else "jpg"
+                 val storagePath = "circles/$circleId/$photoId.$extension"
                  val storageRef = FirebaseStorage.getInstance().reference.child(storagePath)
 
-                 storageRef.putFile(photoUri).addOnSuccessListener { taskSnapshot ->
+                 val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+                     .setContentType(if (mediaType == "video") "video/mp4" else "image/jpeg")
+                     .build()
+
+                 storageRef.putFile(photoUri, metadata).addOnSuccessListener { taskSnapshot ->
                      val sizeBytes = taskSnapshot.metadata?.sizeBytes ?: 0L
                      
                      // Double check (optimistic concurrency not strictly possible without transaction on a single doc, 
@@ -247,7 +253,8 @@ class CircleRepository {
                         "uploaderUid" to uid,
                         "storagePath" to storagePath,
                         "sizeBytes" to sizeBytes,
-                        "createdAt" to FieldValue.serverTimestamp()
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "mediaType" to mediaType
                      )
                      
                      db.collection("circles").document(circleId).collection("photos").document(photoId)
@@ -267,6 +274,7 @@ class CircleRepository {
 
     fun addPhotoToCircles(
         photoUri: Uri,
+        mediaType: String = "image",
         circleIds: List<String>,
         onResult: (isSuccess: Boolean, errors: Map<String, String>) -> Unit
     ) {
@@ -281,7 +289,7 @@ class CircleRepository {
         val totalCircles = circleIds.size
 
         circleIds.forEach { circleId ->
-            uploadPhotoToCircle(circleId, photoUri,
+            uploadPhotoToCircle(circleId, photoUri, mediaType,
                 onSuccess = {
                     completedCount++
                     successCount++
@@ -371,6 +379,7 @@ class CircleRepository {
                             storagePath = doc.getString("storagePath") ?: "",
                             createdAt = doc.getTimestamp("createdAt"),
                             sizeBytes = doc.getLong("sizeBytes") ?: 0L,
+                            mediaType = doc.getString("mediaType") ?: "image",
                             downloadUrl = null
                         )
                     }
@@ -399,6 +408,7 @@ class CircleRepository {
                         storagePath = doc.getString("storagePath") ?: "",
                         createdAt = doc.getTimestamp("createdAt"),
                         sizeBytes = doc.getLong("sizeBytes") ?: 0L,
+                        mediaType = doc.getString("mediaType") ?: "image",
                         downloadUrl = null
                     ))
                 }

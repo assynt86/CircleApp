@@ -191,6 +191,7 @@ class CircleViewModel(application: Application, private val circleId: String) : 
             photos.forEach { photo ->
                 if (photo.storagePath.isBlank() || _uiState.value.inProgressSaves.contains(photo.id)) return@forEach
                 if (savedPhotosStore.isSaved(circleId, photo.id)) return@forEach
+                if (photo.mediaType == "video") return@forEach // don't auto-save videos right now
 
                 _uiState.update { it.copy(inProgressSaves = it.inProgressSaves + photo.id) }
 
@@ -224,7 +225,9 @@ class CircleViewModel(application: Application, private val circleId: String) : 
         val lock = Any()
 
         uris.forEach { uri ->
-            repository.addPhotoToCircles(uri, circleIds) { isSuccess, errors ->
+            val mimeType = getApplication<Application>().contentResolver.getType(uri)
+            val mediaType = if (mimeType?.startsWith("video/") == true) "video" else "image"
+            repository.addPhotoToCircles(uri, mediaType, circleIds) { isSuccess, errors ->
                 synchronized(lock) {
                     completedUploads++
                     if (isSuccess) {

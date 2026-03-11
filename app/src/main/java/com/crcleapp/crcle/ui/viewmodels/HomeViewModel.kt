@@ -343,6 +343,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun uploadPhotoToCircles(
         uri: Uri,
+        mediaType: String = "image",
         onUploadsComplete: () -> Unit,
         onUploadFailed: (String, String) -> Unit
     ) {
@@ -370,6 +371,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     repository.uploadPhotoToCircle(
                         circleId = circleId,
                         photoUri = uri,
+                        mediaType = mediaType,
                         onSuccess = {
                             checkCompletion()
                         },
