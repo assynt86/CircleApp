@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.crcleapp.crcle.R
+import com.crcleapp.crcle.data.CircleRepository
 import com.crcleapp.crcle.ui.theme.LeagueSpartan
 import com.crcleapp.crcle.ui.viewmodels.HomeUiState
 import com.crcleapp.crcle.ui.viewmodels.HomeViewModel
@@ -206,12 +207,25 @@ fun HomeViewContent(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
             ) {
-                Text(
-                    "Your circles", 
-                    style = MaterialTheme.typography.titleMedium,
-                    fontFamily = LeagueSpartan,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Your circles",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = LeagueSpartan,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val limit = if (uiState.isPremium) CircleRepository.PREMIUM_CIRCLE_LIMIT else CircleRepository.FREE_CIRCLE_LIMIT
+                    Text(
+                        text = "${uiState.circles.size} of $limit",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = LeagueSpartan,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
 
                 if (uiState.circles.isEmpty() && !uiState.isLoading) {

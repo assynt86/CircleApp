@@ -17,12 +17,39 @@ class CircleRepository {
 
     companion object {
         const val STORAGE_LIMIT_BYTES = 1_073_741_824L // 1 GB
+        const val FREE_CIRCLE_LIMIT = 2
+        const val PREMIUM_CIRCLE_LIMIT = 6
     }
 
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
     fun getCurrentUserUid(): String? = auth.currentUser?.uid
+
+    private fun checkCircleLimit(
+        uid: String,
+        onAllowed: () -> Unit,
+        onLimitReached: () -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        db.collection("users").document(uid).get().addOnSuccessListener { userDoc ->
+            val isPremium = userDoc.getBoolean("isPremium") ?: false
+            val limit = if (isPremium) PREMIUM_CIRCLE_LIMIT else FREE_CIRCLE_LIMIT
+
+            db.collection("circles")
+                .whereArrayContains("members", uid)
+                .count()
+                .get(AggregateSource.SERVER)
+                .addOnSuccessListener { countSnapshot ->
+                    if (countSnapshot.count < limit) {
+                        onAllowed()
+                    } else {
+                        onLimitReached()
+                    }
+                }
+                .addOnFailureListener { onError(it) }
+        }.addOnFailureListener { onError(it) }
+    }
 
     /**
      * Creates a circle with:
@@ -39,48 +66,56 @@ class CircleRepository {
             return
         }
 
-        val nowMillis = System.currentTimeMillis()
-        val closeAtMillis = nowMillis + durationDays * 24L * 60L * 60L * 1000L
-        val deleteAtMillis = closeAtMillis + 48L * 60L * 60L * 1000L // +48 hours
+        checkCircleLimit(uid,
+            onAllowed = {
+                val nowMillis = System.currentTimeMillis()
+                val closeAtMillis = nowMillis + durationDays * 24L * 60L * 60L * 1000L
+                val deleteAtMillis = closeAtMillis + 48L * 60L * 60L * 1000L // +48 hours
 
-        val inviteCode = generateInviteCode()
+                val inviteCode = generateInviteCode()
 
-        val circleData = hashMapOf(
-            "name" to circleName,
-            "ownerUid" to uid,
-            "inviteCode" to inviteCode,
-            "members" to listOf(uid),
-            "createdAt" to FieldValue.serverTimestamp(),
-            "closeAt" to Timestamp(closeAtMillis / 1000, 0),
-            "deleteAt" to Timestamp(deleteAtMillis / 1000, 0),
-            "cleanedUp" to false,
-            "status" to "open",
-            "storageBytes" to 0L
-        )
-
-        db.collection("circles")
-            .add(circleData)
-            .addOnSuccessListener { docRef ->
-                val circleId = docRef.id
-
-                val codeData = hashMapOf(
-                    "circleId" to circleId,
-                    "circleName" to circleName,
-                    "circleBackgroundUrl" to null,
-                    "status" to "open"
+                val circleData = hashMapOf(
+                    "name" to circleName,
+                    "ownerUid" to uid,
+                    "inviteCode" to inviteCode,
+                    "members" to listOf(uid),
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "closeAt" to Timestamp(closeAtMillis / 1000, 0),
+                    "deleteAt" to Timestamp(deleteAtMillis / 1000, 0),
+                    "cleanedUp" to false,
+                    "status" to "open",
+                    "storageBytes" to 0L
                 )
 
-                db.collection("circle_codes").document(inviteCode).set(codeData)
-                    .addOnSuccessListener {
-                        onSuccess(circleId)
+                db.collection("circles")
+                    .add(circleData)
+                    .addOnSuccessListener { docRef ->
+                        val circleId = docRef.id
+
+                        val codeData = hashMapOf(
+                            "circleId" to circleId,
+                            "circleName" to circleName,
+                            "circleBackgroundUrl" to null,
+                            "status" to "open"
+                        )
+
+                        db.collection("circle_codes").document(inviteCode).set(codeData)
+                            .addOnSuccessListener {
+                                onSuccess(circleId)
+                            }
+                            .addOnFailureListener { e ->
+                                onError(e)
+                            }
                     }
                     .addOnFailureListener { e ->
                         onError(e)
                     }
-            }
-            .addOnFailureListener { e ->
-                onError(e)
-            }
+            },
+            onLimitReached = {
+                onError(Exception("Circle limit reached. Upgrade to Premium for more circles!"))
+            },
+            onError = onError
+        )
     }
 
     fun joinCircleByInviteCode(
@@ -94,30 +129,38 @@ class CircleRepository {
             return
         }
 
-        db.collection("circle_codes")
-            .document(inviteCode.trim())
-            .get()
-            .addOnSuccessListener { doc ->
-                if (!doc.exists()) {
-                    onNotFound()
-                    return@addOnSuccessListener
-                }
+        checkCircleLimit(uid,
+            onAllowed = {
+                db.collection("circle_codes")
+                    .document(inviteCode.trim())
+                    .get()
+                    .addOnSuccessListener { doc ->
+                        if (!doc.exists()) {
+                            onNotFound()
+                            return@addOnSuccessListener
+                        }
 
-                val circleId = doc.getString("circleId") ?: ""
-                if (circleId.isEmpty()) {
-                    onNotFound()
-                    return@addOnSuccessListener
-                }
+                        val circleId = doc.getString("circleId") ?: ""
+                        if (circleId.isEmpty()) {
+                            onNotFound()
+                            return@addOnSuccessListener
+                        }
 
-                db.collection("circles")
-                    .document(circleId)
-                    .update("members", FieldValue.arrayUnion(uid))
-                    .addOnSuccessListener {
-                        onSuccess(circleId)
+                        db.collection("circles")
+                            .document(circleId)
+                            .update("members", FieldValue.arrayUnion(uid))
+                            .addOnSuccessListener {
+                                onSuccess(circleId)
+                            }
+                            .addOnFailureListener { e -> onError(e) }
                     }
                     .addOnFailureListener { e -> onError(e) }
-            }
-            .addOnFailureListener { e -> onError(e) }
+            },
+            onLimitReached = {
+                onError(Exception("Circle limit reached. Upgrade to Premium for more circles!"))
+            },
+            onError = onError
+        )
     }
 
     fun getCircleByInviteCode(
@@ -440,11 +483,19 @@ class CircleRepository {
         onSuccess: () -> Unit,
         onError: (Exception) -> Unit
     ) {
-        db.collection("circles")
-            .document(circleId)
-            .update("members", FieldValue.arrayUnion(uid))
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it) }
+        checkCircleLimit(uid,
+            onAllowed = {
+                db.collection("circles")
+                    .document(circleId)
+                    .update("members", FieldValue.arrayUnion(uid))
+                    .addOnSuccessListener { onSuccess() }
+                    .addOnFailureListener { onError(it) }
+            },
+            onLimitReached = {
+                onError(Exception("User has reached their circle limit."))
+            },
+            onError = onError
+        )
     }
 
     fun addMembersByUids(
@@ -457,11 +508,29 @@ class CircleRepository {
             onSuccess()
             return
         }
-        db.collection("circles")
-            .document(circleId)
-            .update("members", FieldValue.arrayUnion(*uids.toTypedArray()))
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it) }
+        
+        var processedCount = 0
+        var successCount = 0
+        var lastError: Exception? = null
+
+        uids.forEach { uid ->
+            addMemberByUid(circleId, uid,
+                onSuccess = {
+                    processedCount++
+                    successCount++
+                    if (processedCount == uids.size) {
+                        if (successCount > 0) onSuccess() else onError(lastError ?: Exception("Failed to add members"))
+                    }
+                },
+                onError = { e ->
+                    processedCount++
+                    lastError = e
+                    if (processedCount == uids.size) {
+                        if (successCount > 0) onSuccess() else onError(e)
+                    }
+                }
+            )
+        }
     }
 
     fun sendCircleInvite(
@@ -517,12 +586,20 @@ class CircleRepository {
         onError: (Exception) -> Unit
     ) {
         if (accept) {
-            val batch = db.batch()
-            batch.update(db.collection("circle_invites").document(inviteId), "status", "accepted")
-            batch.update(db.collection("circles").document(circleId), "members", FieldValue.arrayUnion(inviteeUid))
-            batch.commit()
-                .addOnSuccessListener { onSuccess() }
-                .addOnFailureListener { onError(it) }
+            checkCircleLimit(inviteeUid,
+                onAllowed = {
+                    val batch = db.batch()
+                    batch.update(db.collection("circle_invites").document(inviteId), "status", "accepted")
+                    batch.update(db.collection("circles").document(circleId), "members", FieldValue.arrayUnion(inviteeUid))
+                    batch.commit()
+                        .addOnSuccessListener { onSuccess() }
+                        .addOnFailureListener { onError(it) }
+                },
+                onLimitReached = {
+                    onError(Exception("Circle limit reached. Upgrade to Premium for more circles!"))
+                },
+                onError = onError
+            )
         } else {
             db.collection("circle_invites").document(inviteId).update("status", "declined")
                 .addOnSuccessListener { onSuccess() }
