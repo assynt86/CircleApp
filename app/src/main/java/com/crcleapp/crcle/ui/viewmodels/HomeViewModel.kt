@@ -48,7 +48,8 @@ data class HomeUiState(
     val previewCircle: Circle? = null,
     val showJoinPreview: Boolean = false,
     val autoAcceptInvites: Boolean = false,
-    val pendingNotificationsCount: Int = 0
+    val pendingNotificationsCount: Int = 0,
+    val isPremium: Boolean = false
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -89,7 +90,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadUserSettings() {
         viewModelScope.launch {
             val user = userRepository.getCurrentUser()
-            _uiState.update { it.copy(autoAcceptInvites = user?.autoAcceptInvites ?: false) }
+            _uiState.update { it.copy(
+                autoAcceptInvites = user?.autoAcceptInvites ?: false,
+                isPremium = user?.isPremium ?: false)
+            }
         }
     }
 

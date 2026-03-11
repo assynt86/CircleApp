@@ -113,7 +113,8 @@ data class UserProfile(
     val displayName: String = "",
     val photoUrl: String = "",
     val createdAt: Timestamp? = null,
-    val autoAcceptInvites: Boolean = false
+    val autoAcceptInvites: Boolean = false,
+    val isPremium: Boolean = false
 )
 
 data class CircleInvite(

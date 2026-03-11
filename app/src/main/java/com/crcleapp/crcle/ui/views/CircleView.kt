@@ -387,7 +387,7 @@ fun CircleViewContent(
                         contentDescription = "Full screen image",
                         isCurrentPage = pagerState.currentPage == page,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         onTap = { onSetFullscreenImage(null) }
                     )
                 }
