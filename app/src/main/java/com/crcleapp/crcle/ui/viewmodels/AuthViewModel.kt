@@ -17,6 +17,9 @@ data class AuthUiState(
     val username: String = "",
     val phone: String = "",
     val displayName: String = "",
+    val emailError: String = "",
+    val usernameError: String = "",
+    val phoneError: String = "",
     val isLoading: Boolean = false,
     val error: String = "",
     val mode: AuthMode = AuthMode.LOGIN
@@ -40,15 +43,21 @@ class AuthViewModel(
     fun isSignedIn(): Boolean = repo.isSignedIn()
 
     fun updateIdentifier(v: String) { _uiState.update { it.copy(identifier = v, error = "") } }
-    fun updateEmail(v: String) { _uiState.update { it.copy(email = v, error = "") } }
+    fun updateEmail(v: String) { _uiState.update { it.copy(email = v, emailError = "", error = "") } }
     fun updatePassword(v: String) { _uiState.update { it.copy(password = v, error = "") } }
-    fun updateUsername(v: String) { _uiState.update { it.copy(username = v, error = "") } }
-    fun updatePhone(v: String) { _uiState.update { it.copy(phone = v, error = "") } }
+    fun updateUsername(v: String) { _uiState.update { it.copy(username = v, usernameError = "", error = "") } }
+    fun updatePhone(v: String) { _uiState.update { it.copy(phone = v, phoneError = "", error = "") } }
     fun updateDisplayName(v: String) { _uiState.update { it.copy(displayName = v, error = "") } }
 
     fun toggleMode() {
         _uiState.update {
-            it.copy(mode = if (it.mode == AuthMode.LOGIN) AuthMode.SIGNUP else AuthMode.LOGIN, error = "")
+            it.copy(
+                mode = if (it.mode == AuthMode.LOGIN) AuthMode.SIGNUP else AuthMode.LOGIN,
+                error = "",
+                emailError = "",
+                usernameError = "",
+                phoneError = ""
+            )
         }
     }
 
@@ -100,7 +109,7 @@ class AuthViewModel(
 
     fun login(onSuccess: () -> Unit) {
         if (!validateLogin()) return
-        
+
         _uiState.update { it.copy(isLoading = true, error = "") }
         repo.login(
             identifier = _uiState.value.identifier,
@@ -118,7 +127,15 @@ class AuthViewModel(
     fun signUp(onSuccess: () -> Unit) {
         if (!validateSignUp()) return
 
-        _uiState.update { it.copy(isLoading = true, error = "") }
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                error = "",
+                emailError = "",
+                usernameError = "",
+                phoneError = ""
+            )
+        }
         repo.signUpWithEmail(
             email = _uiState.value.email,
             password = _uiState.value.password,
@@ -130,10 +147,29 @@ class AuthViewModel(
                 onSuccess()
             },
             onError = { e ->
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "Sign-up failed") }
+                applySignUpError(e.message ?: "Sign-up failed")
             }
         )
     }
 
     fun signOut() = repo.signOut()
+
+    private fun applySignUpError(message: String) {
+        _uiState.update { state ->
+            when {
+                message.contains("email", ignoreCase = true) -> {
+                    state.copy(isLoading = false, error = "", emailError = message, usernameError = "", phoneError = "")
+                }
+                message.contains("username", ignoreCase = true) -> {
+                    state.copy(isLoading = false, error = "", emailError = "", usernameError = message, phoneError = "")
+                }
+                message.contains("phone", ignoreCase = true) -> {
+                    state.copy(isLoading = false, error = "", emailError = "", usernameError = "", phoneError = message)
+                }
+                else -> {
+                    state.copy(isLoading = false, error = message, emailError = "", usernameError = "", phoneError = "")
+                }
+            }
+        }
+    }
 }

@@ -93,6 +93,12 @@ fun AuthView(
                     value = uiState.email,
                     onValueChange = authViewModel::updateEmail,
                     label = { Text("Email", fontFamily = LeagueSpartan) },
+                    isError = uiState.emailError.isNotBlank(),
+                    supportingText = {
+                        if (uiState.emailError.isNotBlank()) {
+                            Text(uiState.emailError, fontFamily = LeagueSpartan)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(
@@ -174,6 +180,12 @@ fun AuthView(
                         authViewModel.updateUsername(filtered)
                     },
                     label = { Text("Username", fontFamily = LeagueSpartan) },
+                    isError = uiState.usernameError.isNotBlank(),
+                    supportingText = {
+                        if (uiState.usernameError.isNotBlank()) {
+                            Text(uiState.usernameError, fontFamily = LeagueSpartan)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(
@@ -191,6 +203,12 @@ fun AuthView(
                     value = uiState.phone,
                     onValueChange = authViewModel::updatePhone,
                     label = { Text("Phone", fontFamily = LeagueSpartan) },
+                    isError = uiState.phoneError.isNotBlank(),
+                    supportingText = {
+                        if (uiState.phoneError.isNotBlank()) {
+                            Text(uiState.phoneError, fontFamily = LeagueSpartan)
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium,
                     keyboardOptions = KeyboardOptions(
@@ -253,3 +271,4 @@ fun AuthView(
         }
     }
 }
+

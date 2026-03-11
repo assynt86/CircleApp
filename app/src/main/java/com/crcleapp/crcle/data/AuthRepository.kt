@@ -182,9 +182,10 @@ class AuthRepository(
             else -> DuplicateFieldException("That account detail is already in use")
         }
 
-    private fun mapSignUpException(error: Exception): Exception =
-        when (error) {
-            is DuplicateFieldException -> error
+    private fun mapSignUpException(error: Exception): Exception {
+        findDuplicateFieldException(error)?.let { return it }
+
+        return when (error) {
             is FirebaseAuthUserCollisionException -> DuplicateFieldException("That email is already in use")
             is FirebaseAuthException -> when (error.errorCode) {
                 "ERROR_EMAIL_ALREADY_IN_USE" -> DuplicateFieldException("That email is already in use")
@@ -193,6 +194,18 @@ class AuthRepository(
             is FirebaseFirestoreException -> error
             else -> error
         }
+    }
+
+    private fun findDuplicateFieldException(error: Throwable?): DuplicateFieldException? {
+        var current = error
+        while (current != null) {
+            if (current is DuplicateFieldException) {
+                return current
+            }
+            current = current.cause
+        }
+        return null
+    }
 
     private fun rollbackIncompleteSignup(
         firebaseUser: FirebaseUser?,
@@ -218,3 +231,4 @@ class AuthRepository(
     private fun normalizePhone(phone: String): String =
         phone.filter { it.isDigit() }
 }
+
