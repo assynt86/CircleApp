@@ -51,11 +51,11 @@ async function sendTestPings() {
 }
 
 /** Transitions circles from 'open' to 'closed' once closeAt timestamp is reached. */
-export const closeExpiredCircles = onSchedule("every 30 minutes", async () => {
+export const closeExpiredCircles = onSchedule("every 15 minutes", async () => {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
 
-  // We query ONLY by status to avoid missing composite indexes.
+  // Query only by status to avoid composite index requirement.
   const circlesSnap = await db
     .collection("circles")
     .where("status", "==", "open")
@@ -67,18 +67,14 @@ export const closeExpiredCircles = onSchedule("every 30 minutes", async () => {
   let count = 0;
   for (const doc of circlesSnap.docs) {
     const closeAt = doc.data().closeAt as admin.firestore.Timestamp | undefined;
-
-    // Check in memory if the close date has passed
     if (closeAt && closeAt.toMillis() <= now.toMillis()) {
       batch.update(doc.ref, {status: "closed"});
-
       const inviteCode = doc.data().inviteCode;
       if (inviteCode) {
         batch.update(db.collection("circle_codes").doc(inviteCode), {status: "closed"});
       }
-
       count++;
-      if (count >= 400) break; // Limit batch size
+      if (count >= 400) break;
     }
   }
 
@@ -106,9 +102,6 @@ export const manualCleanupPing = onRequest(async (req, res) => {
 async function performCleanup() {
   const db = admin.firestore();
   const now = admin.firestore.Timestamp.now();
-
-  // Find circles that should be deleted.
-  // Query only by deleteAt to avoid needing a composite index.
   const circlesSnap = await db
     .collection("circles")
     .where("deleteAt", "<=", now)
@@ -119,13 +112,34 @@ async function performCleanup() {
 
   const batch = db.batch();
   for (const circleDoc of circlesSnap.docs) {
-    // Simply delete the circle document.
-    // The 'onCircleDeleted' trigger below will handle cleaning up storage, photos, circle_codes, etc.
     batch.delete(circleDoc.ref);
   }
-
   await batch.commit();
   console.log(`Deleted ${circlesSnap.size} expired circles.`);
+}
+
+/** Periodically cleans up "dead" friend requests and circle invites. */
+export const cleanupDeadLinks = onSchedule("every 24 hours", async () => {
+  await performLinksCleanup();
+});
+
+/** Manual HTTP trigger to force run cleanup for friend requests and invites. */
+export const manualLinksCleanupPing = onRequest(async (req, res) => {
+  await performLinksCleanup();
+  res.status(200).send("Links cleanup executed. Check Firebase Function logs.");
+});
+
+/**
+ * Deletes friend requests and circle invites that are no longer pending.
+ * @return {Promise<void>}
+ */
+async function performLinksCleanup() {
+  const db = admin.firestore();
+  // Cleanup circle invites that are not pending
+  await deleteByQuery(db.collection("circle_invites").where("status", "!=", "pending"));
+  // Cleanup friend requests that are not pending (including accepted ones)
+  await deleteByQuery(db.collection("friend_requests").where("status", "!=", "pending"));
+  console.log("Dead links cleanup completed.");
 }
 
 /** Triggered when a friend request is created to send notifications. */
@@ -188,18 +202,47 @@ export const onFriendRequestAccepted = onDocumentUpdated("friend_requests/{reque
   }
 });
 
-/** Triggered when a friend request is deleted to clean up friends lists if necessary. */
-export const onFriendRequestDeleted = onDocumentDeleted("friend_requests/{requestId}", async (event) => {
-  const data = event.data?.data();
-  if (!data) return;
-  if (data.status === "accepted") {
-    const senderUid = data.senderUid;
-    const receiverUid = data.receiverUid;
-    const db = admin.firestore();
+/** Triggered when a user removes a friend from their list. */
+export const onFriendRemoved = onDocumentUpdated("users/{uid}", async (event) => {
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
+  if (!before || !after) return;
+
+  const beforeFriends = (before.friends || []) as string[];
+  const afterFriends = (after.friends || []) as string[];
+
+  // Find users who were removed
+  const removedUids = beforeFriends.filter((f) => !afterFriends.includes(f));
+  if (removedUids.length === 0) return;
+
+  const initiatorUid = event.params.uid;
+  const db = admin.firestore();
+
+  for (const targetUid of removedUids) {
+    console.log(`Unfriending process: ${initiatorUid} removed ${targetUid}`);
     const batch = db.batch();
-    batch.update(db.doc(`users/${senderUid}`), {friends: admin.firestore.FieldValue.arrayRemove(receiverUid)});
-    batch.update(db.doc(`users/${receiverUid}`), {friends: admin.firestore.FieldValue.arrayRemove(senderUid)});
+
+    // 1) Remove initiator from target's friends list (bilateral removal)
+    batch.update(db.doc(`users/${targetUid}`), {
+      friends: admin.firestore.FieldValue.arrayRemove(initiatorUid),
+    });
+
+    // 2) Cleanup any associated friend requests to allow re-adding later.
+    // We use safe single-field queries to avoid composite index requirements.
+    const [snap1, snap2] = await Promise.all([
+      db.collection("friend_requests").where("senderUid", "==", initiatorUid).get(),
+      db.collection("friend_requests").where("senderUid", "==", targetUid).get(),
+    ]);
+
+    snap1.docs.forEach((doc) => {
+      if (doc.data().receiverUid === targetUid) batch.delete(doc.ref);
+    });
+    snap2.docs.forEach((doc) => {
+      if (doc.data().receiverUid === initiatorUid) batch.delete(doc.ref);
+    });
+
     await batch.commit();
+    console.log(`Bilateral unfriend complete for ${initiatorUid} and ${targetUid}`);
   }
 });
 
