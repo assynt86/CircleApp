@@ -28,12 +28,28 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: "Circle Notification"
         val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: ""
+        val type = remoteMessage.data["type"]
 
         serviceScope.launch {
             val prefs = NotificationPreferencesStore(applicationContext)
             val notificationsEnabled = prefs.notificationsEnabledFlow.first()
+            
+            if (!notificationsEnabled) return@launch
 
-            if (notificationsEnabled) {
+            val friendRequestsEnabled = prefs.friendRequestsEnabledFlow.first()
+            val friendRequestAcceptedEnabled = prefs.friendRequestAcceptedEnabledFlow.first()
+            val circleInvitesEnabled = prefs.circleInvitesEnabledFlow.first()
+            val newPhotosEnabled = prefs.newPhotosEnabledFlow.first()
+
+            val shouldShow = when (type) {
+                "friend_request" -> friendRequestsEnabled
+                "friend_request_accepted" -> friendRequestAcceptedEnabled
+                "circle_invite" -> circleInvitesEnabled
+                "new_photo" -> newPhotosEnabled
+                else -> true // default to true for unknown types or test_pings
+            }
+
+            if (shouldShow) {
                 sendNotification(title, body)
             }
         }

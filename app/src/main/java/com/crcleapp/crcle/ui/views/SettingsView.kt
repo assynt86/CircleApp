@@ -1,28 +1,18 @@
 package com.crcleapp.crcle.ui.views
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -57,7 +47,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.crcleapp.crcle.ui.theme.LeagueSpartan
 import com.crcleapp.crcle.ui.viewmodels.SettingsViewModel
@@ -68,20 +57,12 @@ fun SettingsView(
     onBack: () -> Unit,
     onReportBug: () -> Unit,
     onBlockedAccountsClick: () -> Unit,
+    onNotificationSettingsClick: () -> Unit,
     onAccountDeleted: () -> Unit,
     viewModel: SettingsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            viewModel.setNotificationsEnabled(true)
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -144,20 +125,9 @@ fun SettingsView(
                 // NOTIFICATIONS SECTION
                 item { SettingsHeader("Notifications") }
                 item {
-                    SettingsToggleRow(
-                        label = "Enable Notifications",
-                        checked = uiState.notificationsEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                } else {
-                                    viewModel.setNotificationsEnabled(true)
-                                }
-                            } else {
-                                viewModel.setNotificationsEnabled(enabled)
-                            }
-                        }
+                    SettingsClickableRow(
+                        label = "Notification Settings",
+                        onClick = onNotificationSettingsClick
                     )
                 }
 

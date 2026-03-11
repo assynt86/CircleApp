@@ -47,9 +47,10 @@ async function sendTestPings() {
 
   // 2) Send FCM Push Notification to the "test_notifications" topic
   const message = {
-    notification: {
+    data: {
       title: title,
       body: body,
+      type: "test_ping",
     },
     topic: "test_notifications",
   };
@@ -175,7 +176,7 @@ export const onFriendRequestCreated = onDocumentCreated(
       console.log(`Sending push notification to ${receiverUid}`);
       await admin.messaging().send({
         token: token,
-        notification: {title, body},
+        data: {title: title, body: body, type: "friend_request"},
       });
     } else {
       console.log(`No FCM token found for ${receiverUid}`);
@@ -234,7 +235,7 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       console.log(`Sending acceptance push notification to ${senderUid}`);
       await admin.messaging().send({
         token: token,
-        notification: {title, body},
+        data: {title: title, body: body, type: "friend_request_accepted"},
       });
     } else {
       console.log(`No FCM token found for ${senderUid}`);
@@ -272,7 +273,7 @@ export const onCircleInviteCreated = onDocumentCreated(
     if (token) {
       await admin.messaging().send({
         token: token,
-        notification: {title, body},
+        data: {title: title, body: body, type: "circle_invite"},
       });
     }
   }
@@ -325,7 +326,7 @@ export const onPhotoAdded = onDocumentCreated(
       if (token) {
         await admin.messaging().send({
           token: token,
-          notification: {title, body},
+          data: {title: title, body: body, type: "new_photo"},
         });
       }
     }
