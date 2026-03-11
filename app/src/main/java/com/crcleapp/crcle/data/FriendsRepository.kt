@@ -189,50 +189,14 @@ class FriendsRepository {
         val uid = currentUid ?: return
         Log.d(TAG, "removeFriend: initiative from $uid to remove $friendUid")
         
-        // 1. Remove from local user's list
+        // We only remove the friend from the current user's document.
+        // A Cloud Function 'onFriendRemoved' watches the 'users' collection 
+        // and automatically removes the current user from the other person's friends list
+        // and cleans up any old friend request documents.
         db.collection("users").document(uid)
             .update("friends", FieldValue.arrayRemove(friendUid))
             .addOnSuccessListener {
-                Log.d(TAG, "removeFriend: local removal success. Now seeking request doc to trigger Cloud Function.")
-
-                // 2. Find the "accepted" request document to delete it.
-                // We perform two separate queries to avoid complex Filters that require composite indexes.
-                db.collection("friend_requests")
-                    .whereEqualTo("senderUid", uid)
-                    .whereEqualTo("receiverUid", friendUid)
-                    .whereEqualTo("status", "accepted")
-                    .get()
-                    .addOnSuccessListener { snapshot1 ->
-                        if (!snapshot1.isEmpty) {
-                            Log.d(TAG, "removeFriend: found request doc (direction A->B). Deleting...")
-                            snapshot1.documents.forEach { it.reference.delete() }
-                            onSuccess()
-                        } else {
-                            // Try the other direction
-                            db.collection("friend_requests")
-                                .whereEqualTo("senderUid", friendUid)
-                                .whereEqualTo("receiverUid", uid)
-                                .whereEqualTo("status", "accepted")
-                                .get()
-                                .addOnSuccessListener { snapshot2 ->
-                                    if (!snapshot2.isEmpty) {
-                                        Log.d(TAG, "removeFriend: found request doc (direction B->A). Deleting...")
-                                        snapshot2.documents.forEach { it.reference.delete() }
-                                    } else {
-                                        Log.w(TAG, "removeFriend: no accepted request doc found in either direction. Other side may not be updated automatically.")
-                                    }
-                                    onSuccess()
-                                }
-                                .addOnFailureListener { e ->
-                                    Log.e(TAG, "removeFriend: direction 2 query failed", e)
-                                    onSuccess()
-                                }
-                        }
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "removeFriend: direction 1 query failed", e)
-                        onSuccess()
-                    }
+                onSuccess()
             }
             .addOnFailureListener { 
                 Log.e(TAG, "removeFriend: local removal failed", it)
