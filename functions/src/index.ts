@@ -2,6 +2,7 @@ import {onSchedule} from "firebase-functions/v2/scheduler";
 import {onRequest} from "firebase-functions/v2/https";
 import {onDocumentUpdated, onDocumentDeleted, onDocumentCreated} from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import * as functionsV1 from "firebase-functions/v1";
 
 admin.initializeApp();
 
@@ -316,6 +317,67 @@ export const onCircleDeleted = onDocumentDeleted("circles/{circleId}", async (ev
   await deleteByQuery(db.collection("circle_codes").where("circleId", "==", circleId));
   await deleteByQuery(db.collection("circle_invites").where("circleId", "==", circleId));
   await deleteByQuery(db.collection("reports").where("circleId", "==", circleId));
+});
+
+/**
+ * 1st-gen Auth trigger: when a user account is deleted, clean up owned circles and user data.
+ * Note: 2nd-gen Cloud Functions do not support Auth create/delete triggers.
+ */
+export const onAuthUserDeleted = functionsV1.auth.user().onDelete(async (user) => {
+  const deletedUid = user.uid;
+
+  const db = admin.firestore();
+  const bucket = admin.storage().bucket();
+
+  // 1) Delete circles owned by this user (your onCircleDeleted will handle deep cleanup)
+  const ownedCirclesSnap = await db
+    .collection("circles")
+    .where("ownerUid", "==", deletedUid)
+    .get();
+
+  await Promise.all(
+    ownedCirclesSnap.docs.map((d) => d.ref.delete().catch(() => null))
+  );
+
+  // 2) Remove user from circles where they are a member but NOT the owner
+  const memberCirclesSnap = await db
+    .collection("circles")
+    .where("members", "array-contains", deletedUid)
+    .get();
+
+  await Promise.all(
+    memberCirclesSnap.docs.map(async (d) => {
+      const data = d.data();
+      if (data.ownerUid === deletedUid) return; // already deleted above
+      await d.ref.update({
+        members: admin.firestore.FieldValue.arrayRemove(deletedUid),
+      }).catch(() => null);
+    })
+  );
+
+  // 3) Remove deletedUid from other users' friends lists (prevents ghost friends)
+  const friendsSnap = await db
+    .collection("users")
+    .where("friends", "array-contains", deletedUid)
+    .get();
+
+  await Promise.all(
+    friendsSnap.docs.map((d) =>
+      d.ref.update({
+        friends: admin.firestore.FieldValue.arrayRemove(deletedUid),
+      }).catch(() => null)
+    )
+  );
+
+  // 4) Delete user docs
+  await db.collection("users").doc(deletedUid).delete().catch(() => null);
+  await db.collection("user_public").doc(deletedUid).delete().catch(() => null);
+
+  // 5) Delete profile pictures (support both profile_pictures/{uid}/... and profile_pictures/{uid}.jpg)
+  const [folderFiles] = await bucket.getFiles({prefix: `profile_pictures/${deletedUid}/`});
+  await Promise.all(folderFiles.map((f) => f.delete().catch(() => null)));
+
+  await bucket.file(`profile_pictures/${deletedUid}.jpg`).delete().catch(() => null);
 });
 
 // -------- helpers --------

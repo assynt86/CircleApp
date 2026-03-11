@@ -8,6 +8,13 @@ import kotlinx.coroutines.tasks.await
 
 class UserRepository {
 
+    companion object {
+        private const val UNIQUE_USER_FIELDS_COLLECTION = "unique_user_fields"
+        private const val TYPE_EMAIL = "email"
+        private const val TYPE_PHONE = "phone"
+        private const val TYPE_USERNAME = "username"
+    }
+
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
@@ -62,17 +69,36 @@ class UserRepository {
     suspend fun deleteAccount(password: String) {
         val user = auth.currentUser ?: throw Exception("User not signed in")
         val email = user.email ?: throw Exception("User email not found")
-        
+
         // 1. Re-authenticate
         val credential = EmailAuthProvider.getCredential(email, password)
         user.reauthenticate(credential).await()
 
         val uid = user.uid
+        val userDoc = db.collection("users").document(uid).get().await()
+        val normalizedEmail = userDoc.getString("normalizedEmail") ?: normalizeEmail(email)
+        val normalizedUsername = userDoc.getString("normalizedUsername") ?: normalizeUsername(userDoc.getString("username").orEmpty())
+        val normalizedPhone = userDoc.getString("normalizedPhone") ?: normalizePhone(userDoc.getString("phone").orEmpty())
 
         // 2. Cleanup User Data
-        db.collection("users").document(uid).delete().await()
-        
+        val batch = db.batch()
+        batch.delete(db.collection("users").document(uid))
+        batch.delete(db.collection("user_public").document(uid))
+        if (normalizedEmail.isNotBlank()) batch.delete(uniqueFieldRef(TYPE_EMAIL, normalizedEmail))
+        if (normalizedUsername.isNotBlank()) batch.delete(uniqueFieldRef(TYPE_USERNAME, normalizedUsername))
+        if (normalizedPhone.isNotBlank()) batch.delete(uniqueFieldRef(TYPE_PHONE, normalizedPhone))
+        batch.commit().await()
+
         // 3. Delete Auth Account
         user.delete().await()
     }
+
+    private fun uniqueFieldRef(type: String, normalizedValue: String) =
+        db.collection(UNIQUE_USER_FIELDS_COLLECTION).document("${type}_$normalizedValue")
+
+    private fun normalizeEmail(email: String): String = email.trim().lowercase()
+
+    private fun normalizeUsername(username: String): String = username.trim().lowercase()
+
+    private fun normalizePhone(phone: String): String = phone.filter { it.isDigit() }
 }

@@ -19,6 +19,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.crcleapp.crcle.ui.theme.CircleAppTheme
@@ -41,6 +42,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.crcleapp.crcle.ui.views.AuthView
 import com.crcleapp.crcle.ui.viewmodels.AuthViewModel
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
@@ -88,39 +90,90 @@ fun AppNavigation(mainViewModel: MainViewModel) {
     val navController = rememberNavController()
     val coroutineScope = rememberCoroutineScope()
     val auth = FirebaseAuth.getInstance()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
     
     // Use null as initial state to detect when preference is actually loaded from DataStore
     val launchOnCameraPref by mainViewModel.launchOnCamera.collectAsState(initial = null)
 
-    // Track authentication state reactively
+    // Track authentication state reactively and wait for the Firestore user profile
+    // before allowing the app to enter the authenticated navigation flow.
     var currentUser by remember { mutableStateOf(auth.currentUser) }
+    var hasUserProfile by remember { mutableStateOf<Boolean?>(null) }
+    var userProfileListener by remember { mutableStateOf<ListenerRegistration?>(null) }
+    var tokenSyncedUid by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(auth) {
-        val listener = FirebaseAuth.AuthStateListener {
-            currentUser = it.currentUser
-            
-            // Sync token on login
-            if (it.currentUser != null) {
-                FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-                    FirebaseFirestore.getInstance().collection("users").document(it.currentUser!!.uid)
-                        .update("fcmToken", token)
-                }
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            val user = firebaseAuth.currentUser
+            currentUser = user
+
+            if (user == null) {
+                tokenSyncedUid = null
+            }
+
+            userProfileListener?.remove()
+            userProfileListener = null
+
+            if (user == null) {
+                hasUserProfile = false
+            } else {
+                hasUserProfile = null
+                userProfileListener = FirebaseFirestore.getInstance().collection("users").document(user.uid)
+                    .addSnapshotListener { snapshot, error ->
+                        if (auth.currentUser?.uid != user.uid) return@addSnapshotListener
+
+                        if (error != null) {
+                            Log.w("AppNavigation", "Failed to observe user profile", error)
+                            return@addSnapshotListener
+                        }
+
+                        val profileExists = snapshot?.exists() == true
+                        hasUserProfile = profileExists
+
+                        if (profileExists && tokenSyncedUid != user.uid) {
+                            tokenSyncedUid = user.uid
+                            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                                FirebaseFirestore.getInstance().collection("users").document(user.uid)
+                                    .update("fcmToken", token)
+                            }
+                        }
+                    }
             }
         }
         auth.addAuthStateListener(listener)
         onDispose {
             auth.removeAuthStateListener(listener)
+            userProfileListener?.remove()
         }
     }
 
-    // Determine the start destination based on initial state.
-    val startDest = if (currentUser != null) "main" else "auth"
+    // Determine the start destination based on a fully ready session.
+    val startDest = if (currentUser != null && hasUserProfile == true) "main" else "auth"
 
-    // Guard the app: if auth state becomes null, immediately push to auth screen
-    LaunchedEffect(currentUser) {
-        if (currentUser == null) {
-            navController.navigate("auth") {
-                popUpTo(0) { inclusive = true }
+    // On cold launch with a remembered auth session, wait for the profile check so we
+    // do not accidentally boot the app into the wrong destination.
+    if (currentRoute == null && currentUser != null && hasUserProfile == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    // Keep the user on auth until the Firestore profile exists, and return there on sign-out.
+    LaunchedEffect(currentUser, hasUserProfile, currentRoute) {
+        if (currentRoute == null) return@LaunchedEffect
+
+        when {
+            (currentUser == null || hasUserProfile != true) && currentRoute != "auth" -> {
+                navController.navigate("auth") {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+            currentUser != null && hasUserProfile == true && currentRoute == "auth" -> {
+                navController.navigate("main") {
+                    popUpTo("auth") { inclusive = true }
+                }
             }
         }
     }
@@ -132,11 +185,7 @@ fun AppNavigation(mainViewModel: MainViewModel) {
             val authVm: AuthViewModel = viewModel()
             AuthView(
                 authViewModel = authVm,
-                onAuthed = {
-                    navController.navigate("main") {
-                        popUpTo("auth") { inclusive = true }
-                    }
-                }
+                onAuthed = {}
             )
         }
 
@@ -153,7 +202,14 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                     nullable = true
                 }
             )
-        ) { backStackEntry ->
+                ) { backStackEntry ->
+            if (currentUser == null || hasUserProfile != true) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                return@composable
+            }
+
             val homeViewModel: HomeViewModel = viewModel()
             val argStartPage = backStackEntry.arguments?.getInt("startPage") ?: -1
             
@@ -339,3 +395,6 @@ fun AppNavigation(mainViewModel: MainViewModel) {
         }
     }
 }
+
+
+
