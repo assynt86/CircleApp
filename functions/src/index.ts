@@ -243,6 +243,35 @@ export const onFriendRequestAccepted = onDocumentUpdated(
   }
 );
 
+export const onFriendRequestDeleted = onDocumentDeleted(
+  "friend_requests/{requestId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    // If an accepted request is deleted (due to unfriend or block),
+    // remove the users from each other's friends list.
+    if (data.status === "accepted") {
+      const senderUid = data.senderUid;
+      const receiverUid = data.receiverUid;
+      console.log(`Friend request deleted (was accepted): removing friends ${senderUid} <-> ${receiverUid}`);
+
+      const db = admin.firestore();
+      const batch = db.batch();
+
+      batch.update(db.doc(`users/${senderUid}`), {
+        friends: admin.firestore.FieldValue.arrayRemove(receiverUid),
+      });
+      batch.update(db.doc(`users/${receiverUid}`), {
+        friends: admin.firestore.FieldValue.arrayRemove(senderUid),
+      });
+
+      await batch.commit();
+      console.log("Successfully removed users from each other's friends lists.");
+    }
+  }
+);
+
 export const onCircleInviteCreated = onDocumentCreated(
   "circle_invites/{inviteId}",
   async (event) => {
