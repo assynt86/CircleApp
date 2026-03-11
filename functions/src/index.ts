@@ -47,9 +47,10 @@ async function sendTestPings() {
 
   // 2) Send FCM Push Notification to the "test_notifications" topic
   const message = {
-    notification: {
+    data: {
       title: title,
       body: body,
+      type: "test_ping",
     },
     topic: "test_notifications",
   };
@@ -175,7 +176,7 @@ export const onFriendRequestCreated = onDocumentCreated(
       console.log(`Sending push notification to ${receiverUid}`);
       await admin.messaging().send({
         token: token,
-        notification: {title, body},
+        data: {title: title, body: body, type: "friend_request"},
       });
     } else {
       console.log(`No FCM token found for ${receiverUid}`);
@@ -234,10 +235,39 @@ export const onFriendRequestAccepted = onDocumentUpdated(
       console.log(`Sending acceptance push notification to ${senderUid}`);
       await admin.messaging().send({
         token: token,
-        notification: {title, body},
+        data: {title: title, body: body, type: "friend_request_accepted"},
       });
     } else {
       console.log(`No FCM token found for ${senderUid}`);
+    }
+  }
+);
+
+export const onFriendRequestDeleted = onDocumentDeleted(
+  "friend_requests/{requestId}",
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    // If an accepted request is deleted (due to unfriend or block),
+    // remove the users from each other's friends list.
+    if (data.status === "accepted") {
+      const senderUid = data.senderUid;
+      const receiverUid = data.receiverUid;
+      console.log(`Friend request deleted (was accepted): removing friends ${senderUid} <-> ${receiverUid}`);
+
+      const db = admin.firestore();
+      const batch = db.batch();
+
+      batch.update(db.doc(`users/${senderUid}`), {
+        friends: admin.firestore.FieldValue.arrayRemove(receiverUid),
+      });
+      batch.update(db.doc(`users/${receiverUid}`), {
+        friends: admin.firestore.FieldValue.arrayRemove(senderUid),
+      });
+
+      await batch.commit();
+      console.log("Successfully removed users from each other's friends lists.");
     }
   }
 );
@@ -272,7 +302,7 @@ export const onCircleInviteCreated = onDocumentCreated(
     if (token) {
       await admin.messaging().send({
         token: token,
-        notification: {title, body},
+        data: {title: title, body: body, type: "circle_invite"},
       });
     }
   }
@@ -325,7 +355,7 @@ export const onPhotoAdded = onDocumentCreated(
       if (token) {
         await admin.messaging().send({
           token: token,
-          notification: {title, body},
+          data: {title: title, body: body, type: "new_photo"},
         });
       }
     }

@@ -35,6 +35,7 @@ import com.crcleapp.crcle.ui.views.FriendsView
 import com.crcleapp.crcle.ui.views.ProfileView
 import com.crcleapp.crcle.ui.views.SettingsView
 import com.crcleapp.crcle.ui.views.NotificationsView
+import com.crcleapp.crcle.ui.views.NotificationSettingsView
 import kotlinx.coroutines.launch
 import com.google.firebase.auth.FirebaseAuth
 import com.crcleapp.crcle.ui.views.AuthView
@@ -273,11 +274,19 @@ fun AppNavigation(mainViewModel: MainViewModel) {
                 onBack = { navController.popBackStack() },
                 onReportBug = { navController.navigate("bug_report") },
                 onBlockedAccountsClick = { navController.navigate("blocked_users") },
+                onNotificationSettingsClick = { navController.navigate("notification_settings") },
                 onAccountDeleted = {
                     navController.navigate("auth") {
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+        
+        // -------- Notification Settings --------
+        composable("notification_settings") {
+            NotificationSettingsView(
+                onBack = { navController.popBackStack() }
             )
         }
 
