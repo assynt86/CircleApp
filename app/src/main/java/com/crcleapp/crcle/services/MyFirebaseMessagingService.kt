@@ -69,13 +69,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         )
 
         val notificationId = (title + body).hashCode()
-        val channelId = "circle_silent_updates"
+        // Changed channel ID to create a new channel with High Importance
+        val channelId = "circle_updates_high_priority"
         
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
-            .setPriority(NotificationCompat.PRIORITY_LOW) // Silent, no heads-up
+            .setPriority(NotificationCompat.PRIORITY_HIGH) // Enables heads-up
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
@@ -84,13 +85,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Circle Silent Updates",
-                NotificationManager.IMPORTANCE_LOW // Silent
+                "Circle Updates",
+                NotificationManager.IMPORTANCE_HIGH // Enables heads-up
             ).apply {
-                description = "Silent notifications for requests and invites"
-                enableLights(false)
-                enableVibration(false)
-                setSound(null, null)
+                description = "Notifications for requests and invites"
+                enableLights(true)
+                enableVibration(true)
             }
             notificationManager.createNotificationChannel(channel)
         }

@@ -6,8 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.crcleapp.crcle.data.NotificationPreferencesStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 data class NotificationSettingsUiState(
@@ -25,31 +26,23 @@ class NotificationSettingsViewModel(application: Application) : AndroidViewModel
     val uiState = _uiState.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            notificationPreferences.notificationsEnabledFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(notificationsEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            notificationPreferences.friendRequestsEnabledFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(friendRequestsEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            notificationPreferences.friendRequestAcceptedEnabledFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(friendRequestAcceptedEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            notificationPreferences.circleInvitesEnabledFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(circleInvitesEnabled = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            notificationPreferences.newPhotosEnabledFlow.collectLatest { enabled ->
-                _uiState.update { it.copy(newPhotosEnabled = enabled) }
-            }
-        }
+        combine(
+            notificationPreferences.notificationsEnabledFlow,
+            notificationPreferences.friendRequestsEnabledFlow,
+            notificationPreferences.friendRequestAcceptedEnabledFlow,
+            notificationPreferences.circleInvitesEnabledFlow,
+            notificationPreferences.newPhotosEnabledFlow
+        ) { enabled, fr, fra, ci, np ->
+            NotificationSettingsUiState(
+                notificationsEnabled = enabled,
+                friendRequestsEnabled = fr,
+                friendRequestAcceptedEnabled = fra,
+                circleInvitesEnabled = ci,
+                newPhotosEnabled = np
+            )
+        }.onEach { state ->
+            _uiState.value = state
+        }.launchIn(viewModelScope)
     }
 
     fun setNotificationsEnabled(enabled: Boolean) {
